@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOA Hotel - WiFi Access</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 90%;
+            max-width: 450px;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        
+        .logo p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .language-toggle {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .lang-btn {
+            background: none;
+            border: 2px solid #667eea;
+            color: #667eea;
+            padding: 8px 15px;
+            margin: 0 5px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .lang-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .lang-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .wifi-option {
+            background: #f8f9ff;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .wifi-option:hover {
+            border-color: #667eea;
+        }
+        
+        .wifi-option input[type="radio"] {
+            margin-right: 10px;
+        }
+        
+        .wifi-option label {
+            margin-bottom: 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+        
+        .speed-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .clean-skip-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #856404;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .info-text {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 20px;
+            line-height: 1.4;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>MOA Hotel</h1>
+            <p id="subtitle">Welcome to our WiFi</p>
+        </div>
+        
+        <div class="language-toggle">
+            <button class="lang-btn active" onclick="setLanguage('en')">English</button>
+            <button class="lang-btn" onclick="setLanguage('de')">Deutsch</button>
+        </div>
+        
+        <form id="loginForm" action="" method="post">
+            <input type="hidden" name="dst" value="$(link-orig)">
+            <input type="hidden" name="popup" value="true">
+            
+            <div class="form-group">
+                <label for="room_number" id="room-label">Room Number</label>
+                <input type="text" id="room_number" name="username" required maxlength="10" placeholder="101">
+            </div>
+            
+            <div class="form-group">
+                <label for="surname" id="surname-label">Guest Surname</label>
+                <input type="text" id="surname" name="radius1" required maxlength="100" placeholder="Schmidt">
+            </div>
+            
+            <div class="form-group">
+                <label id="wifi-speed-label">WiFi Speed Option</label>
+                
+                <div class="wifi-option">
+                    <label>
+                        <input type="radio" name="wifi_speed" value="normal" checked>
+                        <div>
+                            <span id="normal-wifi-label">Standard WiFi</span>
+                            <div class="speed-info" id="normal-speed-info">Good for browsing, email (5-10 Mbps)</div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div class="wifi-option">
+                    <label>
+                        <input type="radio" name="wifi_speed" value="fast">
+                        <div>
+                            <span id="fast-wifi-label">Fast WiFi - Skip Room Cleaning</span>
+                            <div class="speed-info" id="fast-speed-info">High speed for streaming, video calls (20-50 Mbps)</div>
+                            <div class="clean-skip-info">
+                                <span id="clean-skip-warning">⚠️ Choosing this option means housekeeping will skip cleaning your room during your stay to reduce network load. Your room will only be cleaned upon checkout.</span>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="connect-btn">Connect to WiFi</button>
+            
+            <div class="info-text">
+                <span id="device-limit-info">Maximum 3 devices per room can use fast WiFi</span><br>
+                <span id="mac-info">Your device will be automatically registered</span>
+            </div>
+        </form>
+    </div>
+    
+    <script>
+        const translations = {
+            en: {
+                subtitle: "Welcome to our WiFi",
+                roomLabel: "Room Number",
+                surnameLabel: "Guest Surname",
+                wifiSpeedLabel: "WiFi Speed Option",
+                normalWifiLabel: "Standard WiFi",
+                normalSpeedInfo: "Good for browsing, email (5-10 Mbps)",
+                fastWifiLabel: "Fast WiFi - Skip Room Cleaning",
+                fastSpeedInfo: "High speed for streaming, video calls (20-50 Mbps)",
+                cleanSkipWarning: "⚠️ Choosing this option means housekeeping will skip cleaning your room during your stay to reduce network load. Your room will only be cleaned upon checkout.",
+                connectBtn: "Connect to WiFi",
+                deviceLimitInfo: "Maximum 3 devices per room can use fast WiFi",
+                macInfo: "Your device will be automatically registered"
+            },
+            de: {
+                subtitle: "Willkommen zu unserem WLAN",
+                roomLabel: "Zimmernummer",
+                surnameLabel: "Nachname des Gastes",
+                wifiSpeedLabel: "WLAN-Geschwindigkeitsoption",
+                normalWifiLabel: "Standard WLAN",
+                normalSpeedInfo: "Gut für Surfen, E-Mail (5-10 Mbps)",
+                fastWifiLabel: "Schnelles WLAN - Zimmerreinigung überspringen",
+                fastSpeedInfo: "Hohe Geschwindigkeit für Streaming, Videoanrufe (20-50 Mbps)",
+                cleanSkipWarning: "⚠️ Wenn Sie diese Option wählen, wird die Zimmerreinigung während Ihres Aufenthalts übersprungen, um die Netzwerklast zu reduzieren. Ihr Zimmer wird nur beim Checkout gereinigt.",
+                connectBtn: "Mit WLAN verbinden",
+                deviceLimitInfo: "Maximal 3 Geräte pro Zimmer können schnelles WLAN nutzen",
+                macInfo: "Ihr Gerät wird automatisch registriert"
+            }
+        };
+        
+        function setLanguage(lang) {
+            // Update active button
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update text content
+            const t = translations[lang];
+            document.getElementById('subtitle').textContent = t.subtitle;
+            document.getElementById('room-label').textContent = t.roomLabel;
+            document.getElementById('surname-label').textContent = t.surnameLabel;
+            document.getElementById('wifi-speed-label').textContent = t.wifiSpeedLabel;
+            document.getElementById('normal-wifi-label').textContent = t.normalWifiLabel;
+            document.getElementById('normal-speed-info').textContent = t.normalSpeedInfo;
+            document.getElementById('fast-wifi-label').textContent = t.fastWifiLabel;
+            document.getElementById('fast-speed-info').textContent = t.fastSpeedInfo;
+            document.getElementById('clean-skip-warning').textContent = t.cleanSkipWarning;
+            document.getElementById('connect-btn').textContent = t.connectBtn;
+            document.getElementById('device-limit-info').textContent = t.deviceLimitInfo;
+            document.getElementById('mac-info').textContent = t.macInfo;
+            
+            // Update HTML lang attribute
+            document.documentElement.lang = lang;
+        }
+        
+        // Form submission handling
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            const wifiSpeed = document.querySelector('input[name="wifi_speed"]:checked').value;
+            
+            // Add the wifi speed selection to the form
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'radius2';
+            hiddenInput.value = wifiSpeed;
+            this.appendChild(hiddenInput);
+            
+            // The form will be processed by authenticate.php
+            this.action = 'authenticate.php';
+        });
+    </script>
+</body>
+</html>

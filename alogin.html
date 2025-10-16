@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOA Hotel - Connected</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .success-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 90%;
+            max-width: 450px;
+            text-align: center;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            color: white;
+            font-size: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        
+        .success-message {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        .connection-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .info-row:last-child {
+            margin-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .info-label {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .info-value {
+            color: #666;
+        }
+        
+        .continue-btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin-top: 20px;
+        }
+        
+        .continue-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .redirect-info {
+            color: #999;
+            font-size: 12px;
+            margin-top: 15px;
+        }
+        
+        .popup-notice {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 15px 0;
+            font-size: 12px;
+            color: #1565c0;
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-icon">
+            ✓
+        </div>
+        
+        <h1>Successfully Connected!</h1>
+        <p class="success-message">
+            You are now connected to MOA Hotel WiFi. Enjoy your internet access!
+        </p>
+        
+        <div class="connection-info">
+            <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value">Connected</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Network:</span>
+                <span class="info-value">MOA-WiFi</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Speed:</span>
+                <span class="info-value" id="speed-info">Standard</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Device:</span>
+                <span class="info-value" id="device-info">Registered</span>
+            </div>
+        </div>
+        
+        <div class="popup-notice" id="fast-wifi-notice" style="display: none;">
+            🏆 Fast WiFi activated! Room cleaning has been skipped for your stay to ensure optimal network performance.
+        </div>
+        
+        <button class="continue-btn" onclick="continueBrowsing()">
+            Continue Browsing
+        </button>
+        
+        <p class="redirect-info">
+            You will be redirected automatically in <span id="countdown">10</span> seconds
+        </p>
+    </div>
+    
+    <script>
+        // Get URL parameters
+        function getUrlParameter(name) {
+            name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+            var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+            var results = regex.exec(location.search);
+            return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+        }
+        
+        // Get the original destination URL
+        const originalDestination = getUrlParameter('dst') || 'http://www.google.com';
+        const wifiSpeed = getUrlParameter('speed') || 'standard';
+        
+        // Update speed information
+        if (wifiSpeed === 'fast') {
+            document.getElementById('speed-info').textContent = 'Fast (Premium)';
+            document.getElementById('fast-wifi-notice').style.display = 'block';
+        }
+        
+        // Countdown timer
+        let countdown = 10;
+        const countdownElement = document.getElementById('countdown');
+        
+        const timer = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = countdown;
+            
+            if (countdown <= 0) {
+                clearInterval(timer);
+                continueBrowsing();
+            }
+        }, 1000);
+        
+        // Continue browsing function
+        function continueBrowsing() {
+            // Close the popup window if it was opened as a popup
+            if (window.opener) {
+                window.close();
+            } else {
+                // Redirect to the original destination
+                window.location.href = originalDestination;
+            }
+        }
+        
+        // If this page was loaded as a popup, show different behavior
+        if (getUrlParameter('popup') === 'true') {
+            // This is a popup window, so we'll auto-close it
+            setTimeout(() => {
+                window.close();
+            }, 3000);
+        }
+        
+        // Auto-redirect after 10 seconds
+        setTimeout(() => {
+            continueBrowsing();
+        }, 10000);
+    </script>
+</body>
+</html>

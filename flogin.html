@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOA Hotel - Login Error</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .error-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 90%;
+            max-width: 450px;
+            text-align: center;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .error-icon {
+            width: 80px;
+            height: 80px;
+            background: #ff6b6b;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            color: white;
+            font-size: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        
+        .error-message {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        .language-toggle {
+            margin-bottom: 20px;
+        }
+        
+        .lang-btn {
+            background: none;
+            border: 2px solid #ff6b6b;
+            color: #ff6b6b;
+            padding: 8px 15px;
+            margin: 0 5px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .lang-btn.active {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .lang-btn:hover {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .error-details {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .error-code {
+            font-family: monospace;
+            font-size: 12px;
+            color: #c53030;
+            margin-bottom: 10px;
+        }
+        
+        .error-description {
+            color: #742a2a;
+            font-size: 14px;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .retry-btn {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .retry-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .back-btn {
+            background: none;
+            border: 2px solid #ff6b6b;
+            color: #ff6b6b;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .back-btn:hover {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .help-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: left;
+        }
+        
+        .help-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .help-list {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .help-list ul {
+            margin-left: 20px;
+        }
+        
+        .contact-info {
+            color: #999;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">
+            ⚠️
+        </div>
+        
+        <h1 id="error-title">Connection Error</h1>
+        
+        <div class="language-toggle">
+            <button class="lang-btn active" onclick="setLanguage('en')">English</button>
+            <button class="lang-btn" onclick="setLanguage('de')">Deutsch</button>
+        </div>
+        
+        <p class="error-message" id="error-message">
+            Unable to connect to WiFi. Please check your details and try again.
+        </p>
+        
+        <div class="error-details">
+            <div class="error-code" id="error-code">Error Code: AUTH_FAILED</div>
+            <div class="error-description" id="error-description">
+                The room number or surname provided does not match our reservation records.
+            </div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="retry-btn" onclick="retryLogin()" id="retry-btn">Try Again</button>
+            <button class="back-btn" onclick="goBack()" id="back-btn">Go Back</button>
+        </div>
+        
+        <div class="help-section">
+            <div class="help-title" id="help-title">Need Help?</div>
+            <div class="help-list" id="help-content">
+                <ul>
+                    <li>Make sure your room number is correct (e.g., 101, 205)</li>
+                    <li>Use the surname exactly as shown on your reservation</li>
+                    <li>Check that you're currently checked in</li>
+                    <li>Contact reception if problems persist</li>
+                </ul>
+            </div>
+        </div>
+        
+        <p class="contact-info" id="contact-info">
+            For assistance, please contact the front desk: +49 (0) 123 456 789
+        </p>
+    </div>
+    
+    <script>
+        const translations = {
+            en: {
+                errorTitle: "Connection Error",
+                errorMessage: "Unable to connect to WiFi. Please check your details and try again.",
+                retryBtn: "Try Again",
+                backBtn: "Go Back",
+                helpTitle: "Need Help?",
+                helpContent: `
+                    <ul>
+                        <li>Make sure your room number is correct (e.g., 101, 205)</li>
+                        <li>Use the surname exactly as shown on your reservation</li>
+                        <li>Check that you're currently checked in</li>
+                        <li>Contact reception if problems persist</li>
+                    </ul>
+                `,
+                contactInfo: "For assistance, please contact the front desk: +49 (0) 123 456 789",
+                errors: {
+                    'invalid_credentials': 'The room number or surname provided does not match our reservation records.',
+                    'device_limit': 'Maximum 3 devices per room can use fast WiFi. This device will be connected with standard speed.',
+                    'database_error': 'A technical error occurred. Please try again or contact reception.',
+                    'missing_fields': 'Please fill in both room number and surname.',
+                    'general_error': 'An unexpected error occurred. Please try again.'
+                }
+            },
+            de: {
+                errorTitle: "Verbindungsfehler",
+                errorMessage: "WLAN-Verbindung nicht möglich. Bitte überprüfen Sie Ihre Angaben und versuchen Sie es erneut.",
+                retryBtn: "Erneut versuchen",
+                backBtn: "Zurück",
+                helpTitle: "Benötigen Sie Hilfe?",
+                helpContent: `
+                    <ul>
+                        <li>Stellen Sie sicher, dass Ihre Zimmernummer korrekt ist (z.B. 101, 205)</li>
+                        <li>Verwenden Sie den Nachnamen genau wie in Ihrer Reservierung</li>
+                        <li>Prüfen Sie, ob Sie aktuell eingecheckt sind</li>
+                        <li>Kontaktieren Sie die Rezeption bei anhaltenden Problemen</li>
+                    </ul>
+                `,
+                contactInfo: "Für Unterstützung kontaktieren Sie bitte die Rezeption: +49 (0) 123 456 789",
+                errors: {
+                    'invalid_credentials': 'Die angegebene Zimmernummer oder der Nachname stimmen nicht mit unseren Reservierungsunterlagen überein.',
+                    'device_limit': 'Maximal 3 Geräte pro Zimmer können schnelles WLAN nutzen. Dieses Gerät wird mit Standardgeschwindigkeit verbunden.',
+                    'database_error': 'Ein technischer Fehler ist aufgetreten. Bitte versuchen Sie es erneut oder kontaktieren Sie die Rezeption.',
+                    'missing_fields': 'Bitte füllen Sie sowohl Zimmernummer als auch Nachname aus.',
+                    'general_error': 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.'
+                }
+            }
+        };
+        
+        function getUrlParameter(name) {
+            name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+            var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+            var results = regex.exec(location.search);
+            return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+        }
+        
+        function setLanguage(lang) {
+            // Update active button
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update text content
+            const t = translations[lang];
+            document.getElementById('error-title').textContent = t.errorTitle;
+            document.getElementById('error-message').textContent = t.errorMessage;
+            document.getElementById('retry-btn').textContent = t.retryBtn;
+            document.getElementById('back-btn').textContent = t.backBtn;
+            document.getElementById('help-title').textContent = t.helpTitle;
+            document.getElementById('help-content').innerHTML = t.helpContent;
+            document.getElementById('contact-info').textContent = t.contactInfo;
+            
+            // Update error description if error type is known
+            const errorType = getUrlParameter('type') || 'general_error';
+            if (t.errors[errorType]) {
+                document.getElementById('error-description').textContent = t.errors[errorType];
+            }
+            
+            // Update HTML lang attribute
+            document.documentElement.lang = lang;
+        }
+        
+        function retryLogin() {
+            window.location.href = 'login.html';
+        }
+        
+        function goBack() {
+            if (window.history.length > 1) {
+                window.history.back();
+            } else {
+                window.location.href = 'login.html';
+            }
+        }
+        
+        // Initialize page with error information
+        document.addEventListener('DOMContentLoaded', function() {
+            const errorMessage = getUrlParameter('error');
+            const errorType = getUrlParameter('type') || 'general_error';
+            const lang = getUrlParameter('lang') || 'en';
+            
+            // Set language
+            if (lang === 'de') {
+                setLanguage('de');
+                document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelector('.lang-btn[onclick*="de"]').classList.add('active');
+            }
+            
+            // Update error code
+            const errorCodes = {
+                'invalid_credentials': 'AUTH_INVALID_CREDENTIALS',
+                'device_limit': 'DEVICE_LIMIT_EXCEEDED', 
+                'database_error': 'DATABASE_CONNECTION_ERROR',
+                'missing_fields': 'VALIDATION_ERROR',
+                'general_error': 'GENERAL_ERROR'
+            };
+            
+            document.getElementById('error-code').textContent = `Error Code: ${errorCodes[errorType] || 'UNKNOWN_ERROR'}`;
+            
+            // Show custom error message if provided
+            if (errorMessage) {
+                document.getElementById('error-description').textContent = errorMessage;
+            }
+        });
+    </script>
+</body>
+</html>

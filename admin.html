@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOA Hotel - WiFi Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f6fa;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .section-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #666;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-fast {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-normal {
+            background: #cce5ff;
+            color: #004085;
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+        
+        .btn-remove {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-toggle {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .filter-group label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .filters {
+                flex-direction: column;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>MOA Hotel WiFi Management</h1>
+        <p>Device Authorization & Room Management System</p>
+    </div>
+    
+    <div class="container">
+        <!-- Statistics Section -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Devices</h3>
+                <div class="stat-value" id="total-devices">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Fast WiFi Devices</h3>
+                <div class="stat-value" id="fast-devices">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Rooms</h3>
+                <div class="stat-value" id="active-rooms">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Rooms Skipping Clean</h3>
+                <div class="stat-value" id="skip-clean-rooms">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Mews PMS Status</h3>
+                <div class="stat-value" id="mews-status">-</div>
+            </div>
+        </div>
+        
+        <!-- Device Management Section -->
+        <div class="section">
+            <div class="section-title">Authorized Devices</div>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Room Number</label>
+                    <input type="text" id="filter-room" placeholder="All rooms">
+                </div>
+                <div class="filter-group">
+                    <label>Speed Type</label>
+                    <select id="filter-speed">
+                        <option value="">All speeds</option>
+                        <option value="fast">Fast only</option>
+                        <option value="normal">Normal only</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Guest Surname</label>
+                    <input type="text" id="filter-surname" placeholder="All guests">
+                </div>
+                <div class="filter-group">
+                    <label>&nbsp;</label>
+                    <button class="refresh-btn" onclick="loadData()">Refresh Data</button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table id="devices-table">
+                    <thead>
+                        <tr>
+                            <th>Room</th>
+                            <th>Guest</th>
+                            <th>Device MAC</th>
+                            <th>Speed</th>
+                            <th>Last Update</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="6" class="loading">Loading devices...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Room Management Section -->
+        <div class="section">
+            <div class="section-title">Room Cleaning Status</div>
+            
+            <div class="table-container">
+                <table id="rooms-table">
+                    <thead>
+                        <tr>
+                            <th>Room Number</th>
+                            <th>Guest Surname</th>
+                            <th>Cleaning Status</th>
+                            <th>Device Count</th>
+                            <th>Fast Devices</th>
+                            <th>Last Update</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="6" class="loading">Loading rooms...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            
+            // Set up filter event listeners
+            document.getElementById('filter-room').addEventListener('input', filterData);
+            document.getElementById('filter-speed').addEventListener('change', filterData);
+            document.getElementById('filter-surname').addEventListener('input', filterData);
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadData, 30000);
+        });
+        
+        let allDevices = [];
+        let allRooms = [];
+        
+        async function loadData() {
+            try {
+                // Load devices
+                const devicesResponse = await fetch('admin_api.php?action=get_devices');
+                const devicesData = await devicesResponse.json();
+                
+                if (devicesData.success) {
+                    allDevices = devicesData.devices;
+                    updateDevicesTable();
+                    updateStatistics();
+                } else {
+                    showError('Failed to load devices: ' + devicesData.error);
+                }
+                
+                // Load rooms
+                const roomsResponse = await fetch('admin_api.php?action=get_rooms');
+                const roomsData = await roomsResponse.json();
+                
+                if (roomsData.success) {
+                    allRooms = roomsData.rooms;
+                    updateRoomsTable();
+                }
+                
+                // Load Mews status
+                const mewsResponse = await fetch('admin_api.php?action=get_mews_status');
+                const mewsData = await mewsResponse.json();
+                
+                if (mewsData.success) {
+                    updateMewsStatus(mewsData.mews_status);
+                }
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Failed to load data. Please refresh the page.');
+            }
+        }
+        
+        function updateStatistics() {
+            const totalDevices = allDevices.length;
+            const fastDevices = allDevices.filter(d => d.fast_mode).length;
+            const activeRooms = [...new Set(allDevices.map(d => d.room_number))].length;
+            const skipCleanRooms = allRooms.filter(r => r.skip_clean).length;
+            
+            document.getElementById('total-devices').textContent = totalDevices;
+            document.getElementById('fast-devices').textContent = fastDevices;
+            document.getElementById('active-rooms').textContent = activeRooms;
+            document.getElementById('skip-clean-rooms').textContent = skipCleanRooms;
+        }
+        
+        function updateMewsStatus(status) {
+            const statusElement = document.getElementById('mews-status');
+            if (status.status === 'connected') {
+                statusElement.textContent = '✅ Connected';
+                statusElement.style.color = '#28a745';
+            } else {
+                statusElement.textContent = '❌ Error';
+                statusElement.style.color = '#dc3545';
+            }
+        }
+        
+        function updateDevicesTable() {
+            const tbody = document.querySelector('#devices-table tbody');
+            
+            if (allDevices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="loading">No devices found</td></tr>';
+                return;
+            }
+            
+            const filteredDevices = getFilteredDevices();
+            
+            tbody.innerHTML = filteredDevices.map(device => `
+                <tr>
+                    <td>${device.room_number}</td>
+                    <td>${device.surname}</td>
+                    <td><code>${device.device_mac}</code></td>
+                    <td>
+                        <span class="status-badge ${device.fast_mode ? 'status-fast' : 'status-normal'}">
+                            ${device.fast_mode ? 'Fast' : 'Normal'}
+                        </span>
+                    </td>
+                    <td>${new Date(device.last_update).toLocaleString()}</td>
+                    <td>
+                        <button class="action-btn btn-toggle" onclick="toggleDeviceSpeed('${device.device_mac}')">
+                            ${device.fast_mode ? 'Make Normal' : 'Make Fast'}
+                        </button>
+                        <button class="action-btn btn-remove" onclick="removeDevice('${device.device_mac}')">
+                            Remove
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function updateRoomsTable() {
+            const tbody = document.querySelector('#rooms-table tbody');
+            
+            if (allRooms.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="loading">No room data found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = allRooms.map(room => {
+                const roomDevices = allDevices.filter(d => d.room_number === room.room_number);
+                const fastDevices = roomDevices.filter(d => d.fast_mode);
+                
+                return `
+                    <tr>
+                        <td>${room.room_number}</td>
+                        <td>${room.guest_surname}</td>
+                        <td>
+                            <span class="status-badge ${room.skip_clean ? 'status-fast' : 'status-normal'}">
+                                ${room.skip_clean ? 'Skip Cleaning' : 'Normal Cleaning'}
+                            </span>
+                        </td>
+                        <td>${roomDevices.length}</td>
+                        <td>${fastDevices.length}</td>
+                        <td>${new Date(room.updated_at).toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function getFilteredDevices() {
+            const roomFilter = document.getElementById('filter-room').value.toLowerCase();
+            const speedFilter = document.getElementById('filter-speed').value;
+            const surnameFilter = document.getElementById('filter-surname').value.toLowerCase();
+            
+            return allDevices.filter(device => {
+                const roomMatch = !roomFilter || device.room_number.toLowerCase().includes(roomFilter);
+                const speedMatch = !speedFilter || 
+                    (speedFilter === 'fast' && device.fast_mode) || 
+                    (speedFilter === 'normal' && !device.fast_mode);
+                const surnameMatch = !surnameFilter || device.surname.toLowerCase().includes(surnameFilter);
+                
+                return roomMatch && speedMatch && surnameMatch;
+            });
+        }
+        
+        function filterData() {
+            updateDevicesTable();
+        }
+        
+        async function toggleDeviceSpeed(mac) {
+            if (confirm('Are you sure you want to toggle the speed for this device?')) {
+                try {
+                    const response = await fetch('admin_api.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            action: 'toggle_device_speed',
+                            mac: mac
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        loadData(); // Reload data
+                    } else {
+                        showError('Failed to toggle device speed: ' + result.error);
+                    }
+                } catch (error) {
+                    showError('Network error occurred');
+                }
+            }
+        }
+        
+        async function removeDevice(mac) {
+            if (confirm('Are you sure you want to remove this device? The user will need to reconnect.')) {
+                try {
+                    const response = await fetch('admin_api.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            action: 'remove_device',
+                            mac: mac
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        loadData(); // Reload data
+                    } else {
+                        showError('Failed to remove device: ' + result.error);
+                    }
+                } catch (error) {
+                    showError('Network error occurred');
+                }
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.querySelector('.container').insertBefore(errorDiv, document.querySelector('.stats-grid'));
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
