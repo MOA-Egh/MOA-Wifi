@@ -9,10 +9,23 @@ require_once 'mews_connector.php';
 class MewsWifiAuth {
     private $mews;
     private $environment;
+    private $config;
     
-    public function __construct($environment = 'demo') {
+    public function __construct($environment = 'demo', $configFile = null) {
         $this->environment = $environment;
-        $this->mews = new MewsConnector($environment);
+        
+        // Load config
+        $configPath = $configFile ?: __DIR__ . '/mews_config.php';
+        if (file_exists($configPath)) {
+            $this->config = require $configPath;
+            
+            // Use environment from config if not specified
+            if (!$environment && isset($this->config['mews']['environment'])) {
+                $this->environment = $this->config['mews']['environment'];
+            }
+        }
+        
+        $this->mews = new MewsConnector($this->environment, $configPath);
     }
     
     /**

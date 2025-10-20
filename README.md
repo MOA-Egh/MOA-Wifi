@@ -1,24 +1,43 @@
-# MOA skip the clean
-The user "logs in" with their <mark>room number</mark> and <mark>surname</mark> of who made the reservation to their room.
-The system saves the MAC address of the device and authenticates the user. Max 3 devices on fast wifi per room.
-The user can choose to have slow internet or fast internet when they skip the clean. The system must remember which devices use what.
+# MOA Hotel WiFi Management System
 
-# Technical notes
-Login page in german and english
-From the login page take:
-- MAC of the device
-- Room number
-- Surname
+A complete WiFi access management system integrated with **Mews PMS** that allows hotel guests to authenticate using their room credentials and choose internet speed based on cleaning preferences.
 
-The database will contain a table "Authorized devices" which is structured as:
-- device MAC (string)
-- room number (string)
-- fast mode (bool)
-- last update (timestamp)
+## System Overview
 
-and a table "Rooms to skip"
-- room number (string)
-- skip (bool)
+The user "logs in" with their **room number** and **surname** from their reservation. The system validates credentials against live Mews PMS data, saves the device MAC address, and provides internet access. Maximum 3 devices per room can use fast WiFi.
+
+Users can choose between:
+- **Standard WiFi** (5-10 Mbps) - Normal room cleaning
+- **Fast WiFi** (20-50 Mbps) - Skip room cleaning during stay
+
+## Key Features
+
+- ✅ **Mews PMS Integration** - Real-time validation against live reservations
+- 🌐 **Bilingual Interface** - German and English support
+- 📱 **Device Management** - Automatic MAC address tracking
+- ⚡ **Speed Control** - Fast WiFi with cleaning skip option
+- 👥 **Device Limits** - Max 3 fast devices per room
+- 📊 **Admin Dashboard** - Real-time monitoring and management
+- 🔄 **RouterOS Compatible** - Works with MikroTik hotspot system
+
+## Technical Architecture
+
+### Authentication Flow
+1. Guest enters room number + surname on login page
+2. System validates against Mews PMS reservations for today
+3. MAC address is automatically captured and registered
+4. WiFi speed preference is saved (normal/fast)
+5. Room cleaning preference is updated if fast WiFi selected
+
+### Database Structure
+- **`authorized_devices`** - Device MAC, room number, speed mode, timestamps
+- **`rooms_to_skip`** - Room cleaning skip preferences
+
+### Mews Integration
+- Uses existing `MewsConnector` class
+- Validates guests against live reservation data
+- Supports demo, certification, and production environments
+- Automatic fallback for development/testing
 
 Small documentation from RouterOS
 "

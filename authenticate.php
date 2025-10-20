@@ -137,31 +137,140 @@ function redirectToSuccess($dst) {
 
 /**
  * Get client MAC address (RouterOS specific)
- * In a real RouterOS environment, this would be different
+ * RouterOS provides the MAC address through server variables when hotspot is configured properly
  */
 function getClientMAC() {
-    // In RouterOS hotspot, the MAC address is typically available as a server variable
-    // This is a simplified version - you'll need to adapt this for your RouterOS setup
-    
-    if (isset($_SERVER['HTTP_X_MAC_ADDRESS'])) {
-        return $_SERVER['HTTP_X_MAC_ADDRESS'];
+    // Method 0: RouterOS template variables (most reliable)
+    // RouterOS passes MAC via $(mac) template variable in form
+    if (isset($_POST['client_mac']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_POST['client_mac'])) {
+        return strtoupper(str_replace('-', ':', $_POST['client_mac']));
     }
     
-    // Fallback: generate a mock MAC based on IP for testing
-    $ip = $_SERVER['REMOTE_ADDR'];
-    return sprintf("02:00:%02x:%02x:%02x:%02x", 
-        ...array_map('intval', explode('.', $ip))
+    // RouterOS hotspot provides MAC address in different ways depending on configuration
+    
+    // Method 1: Direct server variable (most common in RouterOS hotspot)
+    if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        return strtoupper(str_replace('-', ':', $_SERVER['HTTP_X_FORWARDED_FOR']));
+    }
+    
+    // Method 2: RouterOS may pass MAC in custom header
+    if (isset($_SERVER['HTTP_X_MAC_ADDRESS'])) {
+        return strtoupper(str_replace('-', ':', $_SERVER['HTTP_X_MAC_ADDRESS']));
+    }
+    
+    // Method 3: Check if RouterOS passes MAC in REMOTE_USER (some configurations)
+    if (isset($_SERVER['REMOTE_USER']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_SERVER['REMOTE_USER'])) {
+        return strtoupper(str_replace('-', ':', $_SERVER['REMOTE_USER']));
+    }
+    
+    // Method 4: RouterOS may pass MAC in query parameters or form data
+    if (isset($_GET['mac']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_GET['mac'])) {
+        return strtoupper(str_replace('-', ':', $_GET['mac']));
+    }
+    
+    // Method 5: Check if RouterOS hotspot passes client IP and we can resolve MAC via ARP
+    // Note: This requires RouterOS to be configured to pass client info
+    $client_ip = getClientIP();
+    if ($client_ip) {
+        $mac = getMACFromIP($client_ip);
+        if ($mac) {
+            return $mac;
+        }
+    }
+    
+    // Development/Testing fallback: Generate consistent MAC based on IP and User Agent
+    // This ensures same device gets same MAC during testing
+    if (isDevelopmentMode()) {
+        return generateTestMAC();
+    }
+    
+    // If we can't get MAC address, this is a configuration issue
+    error_log("WARNING: Cannot determine client MAC address. Check RouterOS hotspot configuration.");
+    throw new Exception("Unable to determine device MAC address. Please contact technical support.");
+}
+
+/**
+ * Get client IP address
+ */
+function getClientIP() {
+    // RouterOS typically provides the real client IP
+    $ip_sources = [
+        $_SERVER['HTTP_X_REAL_IP'] ?? null,
+        $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null,
+        $_SERVER['REMOTE_ADDR'] ?? null
+    ];
+    
+    foreach ($ip_sources as $ip) {
+        if ($ip && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return $ip;
+        }
+        if ($ip && filter_var($ip, FILTER_VALIDATE_IP)) {
+            return $ip; // Accept private IPs for hotel network
+        }
+    }
+    
+    return $_SERVER['REMOTE_ADDR'] ?? null;
+}
+
+/**
+ * Attempt to get MAC address from IP using ARP (RouterOS specific)
+ * This only works if RouterOS is configured to expose this information
+ */
+function getMACFromIP($ip) {
+    // This would require RouterOS API integration or special configuration
+    // For now, return null - implement based on your RouterOS setup
+    return null;
+}
+
+/**
+ * Check if we're in development mode
+ */
+function isDevelopmentMode() {
+    $mews_config = require 'mews_config.php';
+    return isset($mews_config['development']['use_fallback_when_api_fails']) && 
+           $mews_config['development']['use_fallback_when_api_fails'] === true;
+}
+
+/**
+ * Generate a consistent test MAC for development
+ */
+function generateTestMAC() {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
+    
+    // Create a consistent hash based on IP and User Agent
+    $hash = md5($ip . $userAgent);
+    
+    // Format as MAC address (using locally administered MAC prefix 02:xx:xx:xx:xx:xx)
+    return sprintf(
+        "02:%s:%s:%s:%s:%s",
+        substr($hash, 0, 2),
+        substr($hash, 2, 2), 
+        substr($hash, 4, 2),
+        substr($hash, 6, 2),
+        substr($hash, 8, 2)
     );
 }
 
 // Main authentication logic
 try {
-    // Get actual MAC address
-    $mac_address = getClientMAC();
-    
-    // Validate required fields
+    // Validate required fields first
     if (empty($username) || empty($surname)) {
         redirectToError("Room number and surname are required");
+    }
+    
+    // Get actual MAC address
+    try {
+        $mac_address = getClientMAC();
+        
+        // Validate MAC address format
+        if (!preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/', $mac_address)) {
+            throw new Exception("Invalid MAC address format: $mac_address");
+        }
+        
+    } catch (Exception $e) {
+        error_log("MAC address error: " . $e->getMessage());
+        redirectToError("Unable to register device. Please ensure you're connecting through the hotel WiFi system.");
     }
     
     // Connect to database

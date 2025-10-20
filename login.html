@@ -139,13 +139,13 @@
         }
         
         .clean-skip-info {
-            background: #fff3cd;
+            background: #d9ffcd;
             border: 1px solid #ffeaa7;
             border-radius: 5px;
             padding: 10px;
             margin-top: 10px;
             font-size: 12px;
-            color: #856404;
+            color: #1e8a10;
         }
         
         .submit-btn {
@@ -193,6 +193,8 @@
         <form id="loginForm" action="" method="post">
             <input type="hidden" name="dst" value="$(link-orig)">
             <input type="hidden" name="popup" value="true">
+            <input type="hidden" name="client_mac" value="$(mac)">
+            <input type="hidden" name="client_ip" value="$(ip)">
             
             <div class="form-group">
                 <label for="room_number" id="room-label">Room Number</label>
@@ -209,7 +211,7 @@
                 
                 <div class="wifi-option">
                     <label>
-                        <input type="radio" name="wifi_speed" value="normal" checked>
+                        <input type="radio" name="wifi_speed" value="normal">
                         <div>
                             <span id="normal-wifi-label">Standard WiFi</span>
                             <div class="speed-info" id="normal-speed-info">Good for browsing, email (5-10 Mbps)</div>
@@ -219,12 +221,12 @@
                 
                 <div class="wifi-option">
                     <label>
-                        <input type="radio" name="wifi_speed" value="fast">
+                        <input type="radio" name="wifi_speed" value="fast" checked>
                         <div>
                             <span id="fast-wifi-label">Fast WiFi - Skip Room Cleaning</span>
                             <div class="speed-info" id="fast-speed-info">High speed for streaming, video calls (20-50 Mbps)</div>
                             <div class="clean-skip-info">
-                                <span id="clean-skip-warning">⚠️ Choosing this option means housekeeping will skip cleaning your room during your stay to reduce network load. Your room will only be cleaned upon checkout.</span>
+                                <span id="clean-skip-warning">Choosing this option means housekeeping will not clean your room during your stay but you will be able to surf at higher speeds.</span>
                             </div>
                         </div>
                     </label>
@@ -251,7 +253,7 @@
                 normalSpeedInfo: "Good for browsing, email (5-10 Mbps)",
                 fastWifiLabel: "Fast WiFi - Skip Room Cleaning",
                 fastSpeedInfo: "High speed for streaming, video calls (20-50 Mbps)",
-                cleanSkipWarning: "⚠️ Choosing this option means housekeeping will skip cleaning your room during your stay to reduce network load. Your room will only be cleaned upon checkout.",
+                cleanSkipWarning: "Choosing this option means housekeeping will not clean your room during your stay but you will be able to surf at higher speeds.",
                 connectBtn: "Connect to WiFi",
                 deviceLimitInfo: "Maximum 3 devices per room can use fast WiFi",
                 macInfo: "Your device will be automatically registered"
@@ -265,7 +267,7 @@
                 normalSpeedInfo: "Gut für Surfen, E-Mail (5-10 Mbps)",
                 fastWifiLabel: "Schnelles WLAN - Zimmerreinigung überspringen",
                 fastSpeedInfo: "Hohe Geschwindigkeit für Streaming, Videoanrufe (20-50 Mbps)",
-                cleanSkipWarning: "⚠️ Wenn Sie diese Option wählen, wird die Zimmerreinigung während Ihres Aufenthalts übersprungen, um die Netzwerklast zu reduzieren. Ihr Zimmer wird nur beim Checkout gereinigt.",
+                cleanSkipWarning: "Wenn Sie diese Option wählen, wird die Zimmerreinigung während Ihres Aufenthalts übersprungen. Ihr Zimmer wird nur beim Checkout gereinigt.",
                 connectBtn: "Mit WLAN verbinden",
                 deviceLimitInfo: "Maximal 3 Geräte pro Zimmer können schnelles WLAN nutzen",
                 macInfo: "Ihr Gerät wird automatisch registriert"

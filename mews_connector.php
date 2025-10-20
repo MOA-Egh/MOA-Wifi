@@ -5,50 +5,133 @@
 class MewsConnector
 {
     private $url;
-
     private $auth;
-
-    private $serviceIds = [
-        '4444f78b-ca4f-4802-be17-acc501177efe', // Id of the Stay Service
-        'af7a7d60-c9ba-402c-a761-b1b700fb3106', // Id of the DayUse Service
-        '63952eb6-5908-4b66-9955-acd100d550d6'  // Id of the Employee Rooms Service
-
-    ];
+    private $config;
+    private $serviceIds = [];
     
-    function __construct($env = 'demo')
+    function __construct($environment = 'demo', $configFile = null)
     {
-        switch ($env) {
-            case 'prod':
-
-                $this->url = "https://api.mews.com/api/connector/v1";
-                try {
-                    $this->auth = parse_ini_file("/ini/prod_mews.ini");
-                } catch (\Exception $e) {
-                    echo "ERROR: Error parsing ini file: " . $e->getMessage() . PHP_EOL;
-                    exit;
+        // Load configuration
+        if ($configFile && file_exists($configFile)) {
+            $this->config = require $configFile;
+        } else {
+            // Try to load default config file
+            $defaultConfigPath = __DIR__ . '/mews_config.php';
+            if (file_exists($defaultConfigPath)) {
+                $this->config = require $defaultConfigPath;
+                // Use environment from config if not specified
+                if (!$environment && isset($this->config['mews']['environment'])) {
+                    $environment = $this->config['mews']['environment'];
                 }
-                break;
-
-            case 'demo':
-                $this->url = "https://api.mews-demo.com/api/connector/v1";
-                try {
-                    $this->auth = parse_ini_file("/ini/demo_mews.ini");
-                } catch (\Exception $e) {
-                    echo "ERROR: Error parsing ini file: " . $e->getMessage() . PHP_EOL;
-                    exit;
-                }
-                break;
-
-            case 'cert':
-                $this->url = "https://api.mews-demo.com/api/connector/v1";
-                try {
-                    $this->auth = parse_ini_file( "/ini/cert_mews.ini");
-                } catch (\Exception $e) {
-                    echo "ERROR: Error parsing ini file: " . $e->getMessage() . PHP_EOL;
-                    exit;
-                }
-                break;
+            }
         }
+        
+        // Set service IDs from config or use defaults
+        if (isset($this->config['mews']['service_ids'])) {
+            $this->serviceIds = $this->config['mews']['service_ids'];
+        } else {
+            $this->serviceIds = [
+                '4444f78b-ca4f-4802-be17-acc501177efe', // Id of the Stay Service
+                'af7a7d60-c9ba-402c-a761-b1b700fb3106', // Id of the DayUse Service
+                '63952eb6-5908-4b66-9955-acd100d550d6'  // Id of the Employee Rooms Service
+            ];
+        }
+        // Initialize based on environment
+        $this->initializeEnvironment($environment);
+    }
+    
+    /**
+     * Initialize the Mews connector for the specified environment
+     *
+     * @param string $env Environment ('demo', 'cert', 'prod')
+     * @throws Exception If configuration or INI file cannot be loaded
+     */
+    private function initializeEnvironment($environment)
+    {
+        // Set API URL from config or use defaults
+        if (isset($this->config['mews']['api_urls'][$environment])) {
+            $this->url = $this->config['mews']['api_urls'][$environment];
+        } else {
+            // Fallback to hardcoded URLs
+            switch ($environment) {
+                case 'prod':
+                    $this->url = "https://api.mews.com/api/connector/v1";
+                    break;
+                case 'demo':
+                case 'cert':
+                    $this->url = "https://api.mews-demo.com/api/connector/v1";
+                    break;
+                default:
+                    throw new Exception("Invalid environment: $environment. Must be 'demo', 'cert', or 'prod'");
+            }
+        }
+
+        $iniFile = $this->getIniFilePath($environment);
+
+        // Load authentication from INI file
+        try {
+            if (!file_exists($iniFile)) {
+                throw new Exception("INI file not found: $iniFile");
+            }
+            
+            $this->auth = parse_ini_file($iniFile);
+            
+            if (!$this->auth) {
+                throw new Exception("Failed to parse INI file: $iniFile");
+            }
+            
+            // Validate required authentication fields
+            $requiredFields = ['ClientToken', 'AccessToken', 'Client'];
+            foreach ($requiredFields as $field) {
+                if (!isset($this->auth[$field]) || empty($this->auth[$field])) {
+                    throw new Exception("Missing required field '$field' in INI file: $iniFile");
+                }
+            }
+            
+        } catch (Exception $e) {
+            error_log("Mews Connector Error: " . $e->getMessage());
+            throw new Exception("Error loading Mews configuration: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get the INI file path for the specified environment
+     *
+     * @param string $env Environment name
+     * @return string INI file path
+     */
+    private function getIniFilePath($environment)
+    {
+        // Check if custom INI path is defined in config
+        if (isset($this->config['mews']['ini_paths'][$environment])) {
+            return $this->config['mews']['ini_paths'][$environment];
+        }
+        
+        // Use default paths
+        return "/ini/{$environment}_mews.ini";
+    }
+    
+    /**
+     * Get configuration value
+     *
+     * @param string $key Configuration key (dot notation supported)
+     * @param mixed $default Default value if key not found
+     * @return mixed Configuration value
+     */
+    public function getConfig($key, $default = null)
+    {
+        $keys = explode('.', $key);
+        $value = $this->config;
+        
+        foreach ($keys as $k) {
+            if (is_array($value) && isset($value[$k])) {
+                $value = $value[$k];
+            } else {
+                return $default;
+            }
+        }
+        
+        return $value;
     }
 
     /**

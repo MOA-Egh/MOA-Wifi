@@ -15,18 +15,27 @@ return [
         // 'cert'  - Mews certification environment 
         // 'prod'  - Production Mews environment
         
-        // Note: Mews authentication credentials should be stored in INI files:
-        // - /ini/demo_mews.ini  (for demo environment)
-        // - /ini/cert_mews.ini  (for certification environment)  
-        // - /ini/prod_mews.ini  (for production environment)
-        
         'timeout' => 30, // API request timeout in seconds
         
-        // Service IDs (these are already defined in your MewsConnector)
+        // INI file paths for different environments
+        'ini_paths' => [
+            'demo' => __DIR__ . '/ini/demo_mews.ini',
+            'cert' => __DIR__ . '/ini/cert_mews.ini', 
+            'prod' => __DIR__ . '/ini/prod_mews.ini'
+        ],
+        
+        // Service IDs for your hotel
         'service_ids' => [
             '4444f78b-ca4f-4802-be17-acc501177efe', // Stay Service
             'af7a7d60-c9ba-402c-a761-b1b700fb3106', // DayUse Service
             '63952eb6-5908-4b66-9955-acd100d550d6'  // Employee Rooms Service
+        ],
+        
+        // API endpoints configuration
+        'api_urls' => [
+            'demo' => 'https://api.mews-demo.com/api/connector/v1',
+            'cert' => 'https://api.mews-demo.com/api/connector/v1',
+            'prod' => 'https://api.mews.com/api/connector/v1'
         ]
     ],
     

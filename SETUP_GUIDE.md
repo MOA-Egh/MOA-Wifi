@@ -79,9 +79,14 @@ For proper MAC address detection and user authentication, you'll need to modify 
 ### 5. Mews PMS Configuration
 
 1. **Set up Mews Authentication:**
-   Create INI files with your Mews credentials in `/ini/` directory:
+   Create INI files with your Mews credentials in the `ini/` directory:
    
-   **For Demo Environment** (`/ini/demo_mews.ini`):
+   ```bash
+   # Copy the template and edit with your credentials
+   cp ini/demo_mews.ini.template ini/demo_mews.ini
+   ```
+   
+   **For Demo Environment** (`ini/demo_mews.ini`):
    ```ini
    ClientToken = "your_demo_client_token"
    AccessToken = "your_demo_access_token"
@@ -89,7 +94,7 @@ For proper MAC address detection and user authentication, you'll need to modify 
    EnterpriseId = "your_demo_enterprise_id"
    ```
 
-   **For Production Environment** (`/ini/prod_mews.ini`):
+   **For Production Environment** (`ini/prod_mews.ini`):
    ```ini
    ClientToken = "your_prod_client_token"
    AccessToken = "your_prod_access_token"
@@ -147,20 +152,23 @@ The system integrates directly with Mews PMS using your existing MewsConnector. 
 - Fast WiFi requires skipping room cleaning
 - Normal WiFi has no device limit
 
-## File Structure
+### File Structure
 
 ```
 MOA-Wifi/
-├── login.html          # Main login page (German/English)
-├── alogin.html         # Success page after login
-├── flogin.html         # Error page for failed logins
-├── redirect.html       # RouterOS redirect page
-├── authenticate.php    # Main authentication logic
-├── admin.html          # Admin management interface
-├── admin_api.php       # API for admin operations
-├── config.php          # Database configuration
-├── database_setup.sql  # Database structure
-└── README.md          # This file
+├── login.html           # Main login page (German/English)
+├── alogin.html          # Success page after login
+├── flogin.html          # Error page for failed logins
+├── redirect.html        # RouterOS redirect page
+├── authenticate.php     # Main authentication logic
+├── admin.html           # Admin management interface
+├── admin_api.php        # API for admin operations
+├── config.php           # Database configuration
+├── mews_connector.php   # Your existing Mews PMS connector
+├── mews_wifi_auth.php   # Mews WiFi authentication adapter
+├── mews_config.php      # Mews configuration settings
+├── database_setup.sql   # Database structure
+└── SETUP_GUIDE.md      # This setup guide
 ```
 
 ## RouterOS Variables
