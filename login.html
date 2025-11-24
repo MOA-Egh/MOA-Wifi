@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MOA Hotel - WiFi Access</title>
+    <title>MOA Berlin - WiFi Access</title>
     <style>
         * {
             margin: 0;
@@ -46,15 +46,19 @@
             margin-bottom: 30px;
         }
         
-        .logo h1 {
-            color: #333;
-            font-size: 28px;
-            margin-bottom: 5px;
+        .logo img {
+            max-width: 180px;
+            height: auto;
+            margin-bottom: 12px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
         }
         
-        .logo p {
-            color: #666;
-            font-size: 14px;
+        .logo h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 5px;
         }
         
         .language-toggle {
@@ -181,13 +185,13 @@
 <body>
     <div class="container">
         <div class="logo">
-            <h1>MOA Hotel</h1>
-            <p id="subtitle">Welcome to our WiFi</p>
+            <img src="logo.png" alt="MOA Berlin Logo">
+            <h1>MOA Berlin WiFi</h1>
         </div>
         
         <div class="language-toggle">
-            <button class="lang-btn active" onclick="setLanguage('en')">English</button>
-            <button class="lang-btn" onclick="setLanguage('de')">Deutsch</button>
+            <button class="lang-btn active" onclick="setLanguage('en')">🇬🇧 English</button>
+            <button class="lang-btn" onclick="setLanguage('de')">🇩🇪 Deutsch</button>
         </div>
         
         <form id="loginForm" action="" method="post">
@@ -245,13 +249,12 @@
     <script>
         const translations = {
             en: {
-                subtitle: "Welcome to our WiFi",
                 roomLabel: "Room Number",
-                surnameLabel: "Guest Surname",
+                surnameLabel: "Surname on Reservation",
                 wifiSpeedLabel: "WiFi Speed Option",
                 normalWifiLabel: "Standard WiFi",
                 normalSpeedInfo: "Good for browsing, email (5-10 Mbps)",
-                fastWifiLabel: "Fast WiFi - Skip Room Cleaning",
+                fastWifiLabel: "Fast WiFi – No Cleaning Until Checkout",
                 fastSpeedInfo: "High speed for streaming, video calls (20-50 Mbps)",
                 cleanSkipWarning: "Choosing this option means housekeeping will not clean your room during your stay but you will be able to surf at higher speeds.",
                 connectBtn: "Connect to WiFi",
@@ -259,9 +262,8 @@
                 macInfo: "Your device will be automatically registered"
             },
             de: {
-                subtitle: "Willkommen zu unserem WLAN",
                 roomLabel: "Zimmernummer",
-                surnameLabel: "Nachname des Gastes",
+                surnameLabel: "Nachname des Buchenden",
                 wifiSpeedLabel: "WLAN-Geschwindigkeitsoption",
                 normalWifiLabel: "Standard WLAN",
                 normalSpeedInfo: "Gut für Surfen, E-Mail (5-10 Mbps)",
@@ -281,7 +283,6 @@
             
             // Update text content
             const t = translations[lang];
-            document.getElementById('subtitle').textContent = t.subtitle;
             document.getElementById('room-label').textContent = t.roomLabel;
             document.getElementById('surname-label').textContent = t.surnameLabel;
             document.getElementById('wifi-speed-label').textContent = t.wifiSpeedLabel;
