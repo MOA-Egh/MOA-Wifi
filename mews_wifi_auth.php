@@ -111,7 +111,7 @@ class MewsWifiAuth {
     public function getEnvironmentInfo() {
         return [
             'environment' => $this->environment,
-            'api_url' => $this->mews->url ?? 'Unknown',
+            'api_url' => $this->mews->getApiUrl(),
             'status' => 'Connected'
         ];
     }

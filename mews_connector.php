@@ -133,6 +133,16 @@ class MewsConnector
         
         return $value;
     }
+    
+    /**
+     * Get the API URL
+     *
+     * @return string The Mews API URL
+     */
+    public function getApiUrl()
+    {
+        return $this->url;
+    }
 
     /**
      * ====================================
