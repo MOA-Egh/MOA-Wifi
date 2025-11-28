@@ -13,7 +13,7 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #dbe2f9;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -21,14 +21,15 @@
         }
         
         .error-container {
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,37,84,0.08), 0 1px 2px rgba(0,0,0,0.04);
             padding: 40px;
             width: 90%;
             max-width: 450px;
             text-align: center;
             animation: slideIn 0.5s ease-out;
+            border: 1px solid rgba(0,37,84,0.06);
         }
         
         @keyframes slideIn {
@@ -43,28 +44,30 @@
         }
         
         .error-icon {
-            width: 80px;
-            height: 80px;
-            background: #667eea;
+            width: 70px;
+            height: 70px;
+            background: #dc2626;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             margin: 0 auto 20px;
             color: white;
-            font-size: 40px;
+            font-size: 32px;
         }
         
         h1 {
-            color: #333;
+            color: #002554;
             margin-bottom: 10px;
-            font-size: 24px;
+            font-size: 22px;
+            font-weight: 600;
         }
         
         .error-message {
             color: #666;
             margin-bottom: 20px;
             line-height: 1.6;
+            font-size: 14px;
         }
         
         .language-toggle {
@@ -72,29 +75,40 @@
         }
         
         .lang-btn {
-            background: none;
-            border: 2px solid #667eea;
-            color: #667eea;
-            padding: 8px 15px;
+            background: transparent;
+            border: 2px solid #002554;
+            color: #002554;
+            padding: 8px 16px;
             margin: 0 5px;
-            border-radius: 20px;
+            border-radius: 4px;
             cursor: pointer;
             transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+        }
+        
+        .lang-btn img {
+            width: 20px;
+            height: 14px;
+            object-fit: cover;
+            border-radius: 2px;
         }
         
         .lang-btn.active {
-            background: #667eea;
+            background: #002554;
             color: white;
         }
         
         .lang-btn:hover {
-            background: #667eea;
+            background: #002554;
             color: white;
         }
         
         .error-details {
-            background: #f8f9ff;
-            border: 1px solid #e0e6ff;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
             border-radius: 8px;
             padding: 15px;
             margin: 20px 0;
@@ -103,13 +117,13 @@
         
         .error-code {
             font-family: monospace;
-            font-size: 12px;
-            color: #667eea;
-            margin-bottom: 10px;
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
         }
         
         .error-description {
-            color: #4c63d2;
+            color: #c62828;
             font-size: 14px;
         }
         
@@ -121,40 +135,46 @@
         }
         
         .retry-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #002554;
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
+            padding: 14px 28px;
+            border-radius: 4px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .retry-btn:hover {
+            background: #003d7a;
             transform: translateY(-2px);
         }
         
         .back-btn {
-            background: none;
-            border: 2px solid #667eea;
-            color: #667eea;
-            padding: 10px 24px;
-            border-radius: 8px;
+            background: transparent;
+            border: 2px solid #002554;
+            color: #002554;
+            padding: 12px 28px;
+            border-radius: 4px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .back-btn:hover {
-            background: #667eea;
+            background: #002554;
             color: white;
         }
         
         .help-section {
-            background: #f8f9fa;
+            background: #f8fafc;
+            border: 1px solid rgba(0,37,84,0.08);
             border-radius: 8px;
             padding: 20px;
             margin-top: 20px;
@@ -163,14 +183,15 @@
         
         .help-title {
             font-weight: 600;
-            color: #333;
+            color: #002554;
             margin-bottom: 10px;
+            font-size: 14px;
         }
         
         .help-list {
             color: #666;
-            font-size: 14px;
-            line-height: 1.6;
+            font-size: 13px;
+            line-height: 1.7;
         }
         
         .help-list ul {
@@ -178,7 +199,7 @@
         }
         
         .contact-info {
-            color: #999;
+            color: #888;
             font-size: 12px;
             margin-top: 20px;
         }
@@ -187,14 +208,14 @@
 <body>
     <div class="error-container">
         <div class="error-icon">
-            ⚠️
+            ✕
         </div>
         
         <h1 id="error-title">Connection Error</h1>
         
         <div class="language-toggle">
-            <button class="lang-btn active" onclick="setLanguage('en')">English</button>
-            <button class="lang-btn" onclick="setLanguage('de')">Deutsch</button>
+            <button class="lang-btn active" onclick="setLanguage('en')"><img src="assets/images/britain.png" alt="EN"> English</button>
+            <button class="lang-btn" onclick="setLanguage('de')"><img src="assets/images/germany.png" alt="DE"> Deutsch</button>
         </div>
         
         <p class="error-message" id="error-message">
@@ -290,7 +311,7 @@
         function setLanguage(lang) {
             // Update active button
             document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            event.target.closest('.lang-btn').classList.add('active');
             
             // Update text content
             const t = translations[lang];
@@ -327,8 +348,16 @@
         // Initialize page with error information
         document.addEventListener('DOMContentLoaded', function() {
             const errorMessage = getUrlParameter('error');
-            const errorType = getUrlParameter('type') || 'general_error';
+            const errorType = getUrlParameter('type') || '';
             const lang = getUrlParameter('lang') || 'en';
+            
+            // Check if page was accessed with valid error parameters
+            // Must have either an error message or error type from authenticate.php
+            if (!errorMessage && !errorType) {
+                // Redirect to login page - this page should only be accessed after an error
+                window.location.href = 'login.html';
+                return;
+            }
             
             // Set language
             if (lang === 'de') {
@@ -346,11 +375,15 @@
                 'general_error': 'GENERAL_ERROR'
             };
             
-            document.getElementById('error-code').textContent = `Error Code: ${errorCodes[errorType] || 'UNKNOWN_ERROR'}`;
+            const displayErrorType = errorType || 'general_error';
+            document.getElementById('error-code').textContent = `Error Code: ${errorCodes[displayErrorType] || 'UNKNOWN_ERROR'}`;
             
-            // Show custom error message if provided
+            // Show error description based on type or custom message
+            const t = translations[lang];
             if (errorMessage) {
                 document.getElementById('error-description').textContent = errorMessage;
+            } else if (t.errors[displayErrorType]) {
+                document.getElementById('error-description').textContent = t.errors[displayErrorType];
             }
         });
     </script>

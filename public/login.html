@@ -13,7 +13,7 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #dbe2f9;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -21,13 +21,14 @@
         }
         
         .container {
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,37,84,0.08), 0 1px 2px rgba(0,0,0,0.04);
             padding: 40px;
             width: 90%;
             max-width: 450px;
             animation: slideIn 0.5s ease-out;
+            border: 1px solid rgba(0,37,84,0.06);
         }
         
         @keyframes slideIn {
@@ -47,7 +48,7 @@
         }
         
         .logo img {
-            max-width: 180px;
+            max-width: 160px;
             height: auto;
             margin-bottom: 12px;
             display: block;
@@ -56,34 +57,46 @@
         }
         
         .logo h1 {
-            color: #333;
-            font-size: 24px;
-            margin-bottom: 5px;
+            color: #002554;
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: 1px;
         }
         
         .language-toggle {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
         
         .lang-btn {
-            background: none;
-            border: 2px solid #667eea;
-            color: #667eea;
-            padding: 8px 15px;
+            background: transparent;
+            border: 2px solid #002554;
+            color: #002554;
+            padding: 8px 16px;
             margin: 0 5px;
-            border-radius: 20px;
+            border-radius: 4px;
             cursor: pointer;
             transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+        }
+        
+        .lang-btn img {
+            width: 20px;
+            height: 14px;
+            object-fit: cover;
+            border-radius: 2px;
         }
         
         .lang-btn.active {
-            background: #667eea;
+            background: #002554;
             color: white;
         }
         
         .lang-btn:hover {
-            background: #667eea;
+            background: #002554;
             color: white;
         }
         
@@ -94,46 +107,48 @@
         label {
             display: block;
             margin-bottom: 8px;
-            color: #333;
+            color: #002554;
             font-weight: 500;
+            font-size: 14px;
         }
         
         input[type="text"] {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             border: 2px solid #e0e0e0;
-            border-radius: 8px;
+            border-radius: 4px;
             font-size: 16px;
             transition: border-color 0.3s ease;
         }
         
         input[type="text"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #002554;
         }
         
         .wifi-option {
-            background: #f8f9ff;
+            background: #f8f8f8;
             border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
+            border-radius: 6px;
+            padding: 18px;
+            margin: 15px 0;
             transition: all 0.3s ease;
         }
         
         .wifi-option:hover {
-            border-color: #667eea;
+            border-color: #002554;
         }
         
         .wifi-option input[type="radio"] {
             margin-right: 10px;
+            accent-color: #002554;
         }
         
         .wifi-option label {
             margin-bottom: 0;
             cursor: pointer;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
         }
         
         .speed-info {
@@ -143,38 +158,41 @@
         }
         
         .clean-skip-info {
-            background: #d9ffcd;
-            border: 1px solid #ffeaa7;
-            border-radius: 5px;
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 4px;
             padding: 10px;
             margin-top: 10px;
             font-size: 12px;
-            color: #1e8a10;
+            color: #2e7d32;
         }
         
         .submit-btn {
             width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #002554;
             color: white;
             border: none;
-            padding: 15px;
-            border-radius: 8px;
+            padding: 16px;
+            border-radius: 4px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .submit-btn:hover {
+            background: #003d7a;
             transform: translateY(-2px);
         }
         
         .info-text {
             text-align: center;
-            color: #666;
+            color: #888;
             font-size: 12px;
             margin-top: 20px;
-            line-height: 1.4;
+            line-height: 1.5;
         }
         
         .hidden {
@@ -190,8 +208,8 @@
         </div>
         
         <div class="language-toggle">
-            <button class="lang-btn active" onclick="setLanguage('en')">🇬🇧 English</button>
-            <button class="lang-btn" onclick="setLanguage('de')">🇩🇪 Deutsch</button>
+            <button class="lang-btn active" onclick="setLanguage('en')"><img src="assets/images/britain.png" alt="EN"> English</button>
+            <button class="lang-btn" onclick="setLanguage('de')"><img src="assets/images/germany.png" alt="DE"> Deutsch</button>
         </div>
         
         <form id="loginForm" action="" method="post">
@@ -199,6 +217,7 @@
             <input type="hidden" name="popup" value="true">
             <input type="hidden" name="client_mac" value="$(mac)">
             <input type="hidden" name="client_ip" value="$(ip)">
+            <input type="hidden" name="lang" id="form-lang" value="en">
             
             <div class="form-group">
                 <label for="room_number" id="room-label">Room Number</label>
@@ -230,7 +249,7 @@
                             <span id="fast-wifi-label">Fast WiFi - Skip Room Cleaning</span>
                             <div class="speed-info" id="fast-speed-info">High speed for streaming, video calls (20-50 Mbps)</div>
                             <div class="clean-skip-info">
-                                <span id="clean-skip-warning">Choosing this option means housekeeping will not clean your room during your stay but you will be able to surf at higher speeds.</span>
+                                <span id="clean-skip-warning">Housekeeping will not clean your room during your stay but you will be able to surf at higher speeds.</span>
                             </div>
                         </div>
                     </label>
@@ -240,8 +259,8 @@
             <button type="submit" class="submit-btn" id="connect-btn">Connect to WiFi</button>
             
             <div class="info-text">
-                <span id="device-limit-info">Maximum 3 devices per room can use fast WiFi</span><br>
-                <span id="mac-info">Your device will be automatically registered</span>
+                <span id="device-limit-info">Maximum 3 devices per room</span><br>
+                <span id="mac-info">Your device will be automatically registered upon login</span>
             </div>
         </form>
     </div>
@@ -256,30 +275,37 @@
                 normalSpeedInfo: "Good for browsing, email (5-10 Mbps)",
                 fastWifiLabel: "Fast WiFi – No Cleaning Until Checkout",
                 fastSpeedInfo: "High speed for streaming, video calls (20-50 Mbps)",
-                cleanSkipWarning: "Choosing this option means housekeeping will not clean your room during your stay but you will be able to surf at higher speeds.",
+                cleanSkipWarning: "Housekeeping will not clean your room during your stay, but you will be able to surf at higher speeds.",
                 connectBtn: "Connect to WiFi",
-                deviceLimitInfo: "Maximum 3 devices per room can use fast WiFi",
-                macInfo: "Your device will be automatically registered"
+                deviceLimitInfo: "Maximum 3 devices per room",
+                macInfo: "Your device will be automatically registered upon login"
             },
             de: {
                 roomLabel: "Zimmernummer",
-                surnameLabel: "Nachname des Buchenden",
-                wifiSpeedLabel: "WLAN-Geschwindigkeitsoption",
-                normalWifiLabel: "Standard WLAN",
-                normalSpeedInfo: "Gut für Surfen, E-Mail (5-10 Mbps)",
-                fastWifiLabel: "Schnelles WLAN - Zimmerreinigung überspringen",
+                surnameLabel: "Nachname der Reservierung",
+                wifiSpeedLabel: "WLAN-Geschwindigkeit",
+                normalWifiLabel: "Standard-WLAN",
+                normalSpeedInfo: "Geeignet für Surfen, E-Mail (5-10 Mbps)",
+                fastWifiLabel: "Schnelles WLAN – Keine Reinigung bis zum Checkout",
                 fastSpeedInfo: "Hohe Geschwindigkeit für Streaming, Videoanrufe (20-50 Mbps)",
-                cleanSkipWarning: "Wenn Sie diese Option wählen, wird die Zimmerreinigung während Ihres Aufenthalts übersprungen. Ihr Zimmer wird nur beim Checkout gereinigt.",
+                cleanSkipWarning: "Der Zimmerservice wird Ihr Zimmer während Ihres Aufenthalts nicht reinigen, aber Sie können mit höherer Geschwindigkeit surfen.",
                 connectBtn: "Mit WLAN verbinden",
-                deviceLimitInfo: "Maximal 3 Geräte pro Zimmer können schnelles WLAN nutzen",
-                macInfo: "Ihr Gerät wird automatisch registriert"
+                deviceLimitInfo: "Maximal 3 Geräte pro Zimmer",
+                macInfo: "Ihr Gerät wird bei der Anmeldung automatisch registriert"
             }
         };
         
+        let currentLang = 'en';
+        
         function setLanguage(lang) {
+            currentLang = lang;
+            
+            // Update hidden form field
+            document.getElementById('form-lang').value = lang;
+            
             // Update active button
             document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            event.target.closest('.lang-btn').classList.add('active');
             
             // Update text content
             const t = translations[lang];

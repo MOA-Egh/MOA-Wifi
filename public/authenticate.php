@@ -21,6 +21,7 @@ $username = $_POST['username'] ?? ''; // Room number
 $surname = $_POST['radius1'] ?? '';   // Guest surname
 $wifi_speed = $_POST['radius2'] ?? 'normal'; // WiFi speed preference
 $dst = $_POST['dst'] ?? 'http://www.google.com';
+$lang = $_POST['lang'] ?? 'en'; // Language preference from login page
 
 // For RouterOS, you might need to get the MAC address differently
 // In a real RouterOS environment, this would be available as a server variable
@@ -130,8 +131,11 @@ function redirectToError($message, $lang = 'en') {
 /**
  * Redirect to success page
  */
-function redirectToSuccess($dst) {
-    header("Location: alogin.html?dst=" . urlencode($dst));
+function redirectToSuccess($dst, $speed, $lang) {
+    // Generate a simple token to validate access came from login
+    $token = base64_encode(hash('sha256', session_id() . time() . $dst, true));
+    $speedLabel = ($speed >= 50) ? 'fast' : 'standard';
+    header("Location: alogin.html?dst=" . urlencode($dst) . "&speed=" . $speedLabel . "&lang=" . $lang . "&token=" . urlencode($token));
     exit();
 }
 
@@ -254,9 +258,14 @@ function generateTestMAC() {
 
 // Main authentication logic
 try {
+    // Start session for token generation
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
     // Validate required fields first
     if (empty($username) || empty($surname)) {
-        redirectToError("Room number and surname are required");
+        redirectToError("Room number and surname are required", $lang);
     }
     
     // Get actual MAC address
@@ -270,7 +279,7 @@ try {
         
     } catch (Exception $e) {
         error_log("MAC address error: " . $e->getMessage());
-        redirectToError("Unable to register device. Please ensure you're connecting through the hotel WiFi system.");
+        redirectToError("Unable to register device. .", $lang);
     }
     
     // Connect to database
@@ -282,7 +291,7 @@ try {
     // Validate guest credentials against Mews PMS
     $guest = validateGuest($mews_auth, $username, $surname);
     if (!$guest) {
-        redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.");
+        redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.", $lang);
     }
     
     // Determine speed based on selection (fast = 50 Mbps, normal = 20 Mbps)
@@ -303,10 +312,10 @@ try {
     // This depends on your specific RouterOS configuration
     
     // Redirect to success page
-    redirectToSuccess($dst);
+    redirectToSuccess($dst, $speed, $lang);
     
 } catch (Exception $e) {
     error_log("Authentication error: " . $e->getMessage());
-    redirectToError("An error occurred during authentication. Please try again.");
+    redirectToError("An error occurred during authentication. Please try again.", $lang);
 }
 ?>

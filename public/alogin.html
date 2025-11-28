@@ -13,7 +13,7 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            background: #dbe2f9;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -21,20 +21,21 @@
         }
         
         .success-container {
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,37,84,0.08), 0 1px 2px rgba(0,0,0,0.04);
             padding: 40px;
             width: 90%;
             max-width: 450px;
             text-align: center;
-            animation: slideIn 0.5s ease-out;
+            animation: slideIn 0.3s ease-out;
+            border: 1px solid rgba(0,37,84,0.06);
         }
         
         @keyframes slideIn {
             from {
                 opacity: 0;
-                transform: scale(0.9);
+                transform: scale(0.95);
             }
             to {
                 opacity: 1;
@@ -43,33 +44,35 @@
         }
         
         .success-icon {
-            width: 80px;
-            height: 80px;
-            background: #4CAF50;
+            width: 70px;
+            height: 70px;
+            background: #2e7d32;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             margin: 0 auto 20px;
             color: white;
-            font-size: 40px;
+            font-size: 32px;
         }
         
         h1 {
-            color: #333;
+            color: #002554;
             margin-bottom: 10px;
-            font-size: 24px;
+            font-size: 22px;
+            font-weight: 600;
         }
         
         .success-message {
             color: #666;
             margin-bottom: 20px;
             line-height: 1.6;
+            font-size: 14px;
         }
         
         .connection-info {
-            background: #f8f9fa;
-            border-radius: 10px;
+            background: #f8f8f8;
+            border-radius: 6px;
             padding: 20px;
             margin: 20px 0;
             text-align: left;
@@ -79,7 +82,7 @@
             display: flex;
             justify-content: space-between;
             margin-bottom: 10px;
-            padding-bottom: 8px;
+            padding-bottom: 10px;
             border-bottom: 1px solid #e0e0e0;
         }
         
@@ -90,91 +93,155 @@
         
         .info-label {
             font-weight: 600;
-            color: #333;
+            color: #002554;
+            font-size: 13px;
         }
         
         .info-value {
             color: #666;
+            font-size: 13px;
         }
         
         .continue-btn {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            background: #002554;
             color: white;
             border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 16px;
+            padding: 16px 30px;
+            border-radius: 4px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            transition: all 0.3s ease;
             margin-top: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .continue-btn:hover {
+            background: #003d7a;
             transform: translateY(-2px);
         }
         
         .redirect-info {
-            color: #999;
+            color: #888;
             font-size: 12px;
             margin-top: 15px;
         }
         
         .popup-notice {
-            background: #e3f2fd;
-            border: 1px solid #bbdefb;
-            border-radius: 5px;
-            padding: 10px;
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 4px;
+            padding: 12px;
             margin: 15px 0;
             font-size: 12px;
-            color: #1565c0;
+            color: #2e7d32;
+        }
+        
+        .access-denied {
+            text-align: center;
+            color: #666;
+        }
+        
+        .access-denied h1 {
+            color: #c62828;
+        }
+        
+        .access-denied .back-link {
+            color: #002554;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .access-denied .back-link:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
 <body>
-    <div class="success-container">
+    <div class="success-container" id="success-container">
         <div class="success-icon">
             ✓
         </div>
         
-        <h1>Successfully Connected!</h1>
-        <p class="success-message">
-            You are now connected to MOA Hotel WiFi. Enjoy your internet access!
+        <h1 id="title">Successfully Connected!</h1>
+        <p class="success-message" id="message">
+            You are now connected. Enjoy your internet access!
         </p>
         
         <div class="connection-info">
             <div class="info-row">
-                <span class="info-label">Status:</span>
-                <span class="info-value">Connected</span>
+                <span class="info-label" id="label-status">Status:</span>
+                <span class="info-value" id="value-status">Connected</span>
             </div>
             <div class="info-row">
-                <span class="info-label">Network:</span>
+                <span class="info-label" id="label-network">Network:</span>
                 <span class="info-value">MOA-WiFi</span>
             </div>
             <div class="info-row">
-                <span class="info-label">Speed:</span>
+                <span class="info-label" id="label-speed">Speed:</span>
                 <span class="info-value" id="speed-info">Standard</span>
             </div>
             <div class="info-row">
-                <span class="info-label">Device:</span>
+                <span class="info-label" id="label-device">Device:</span>
                 <span class="info-value" id="device-info">Registered</span>
             </div>
         </div>
         
         <div class="popup-notice" id="fast-wifi-notice" style="display: none;">
-            🏆 Fast WiFi activated! Room cleaning has been skipped for your stay to ensure optimal network performance.
+            🏆 <span id="fast-notice-text">Fast WiFi activated! Room cleaning has been skipped for your stay.</span>
         </div>
         
-        <button class="continue-btn" onclick="continueBrowsing()">
+        <button class="continue-btn" onclick="continueBrowsing()" id="continue-btn">
             Continue Browsing
         </button>
         
-        <p class="redirect-info">
-            You will be redirected automatically in <span id="countdown">10</span> seconds
+        <p class="redirect-info" id="redirect-info">
+            You will be redirected automatically in <span id="countdown">3</span> seconds
         </p>
     </div>
     
     <script>
+        // Translations
+        const translations = {
+            en: {
+                title: 'Successfully Connected!',
+                message: 'You are now connected. Enjoy your internet access!',
+                labelStatus: 'Status:',
+                valueStatus: 'Connected',
+                labelNetwork: 'Network:',
+                labelSpeed: 'Speed:',
+                labelDevice: 'Device:',
+                speedStandard: 'Standard',
+                speedFast: 'Fast (Premium)',
+                deviceRegistered: 'Registered',
+                fastNotice: 'Fast WiFi activated! Room cleaning has been skipped for your stay.',
+                continueBtn: 'Continue Browsing',
+                redirectInfo: 'You will be redirected automatically in {seconds} seconds',
+                accessDeniedTitle: 'Access Denied',
+                accessDeniedMessage: 'This page can only be accessed after successful login.',
+                backToLogin: 'Back to Login'
+            },
+            de: {
+                title: 'Erfolgreich verbunden!',
+                message: 'Sie sind jetzt verbunden. Genießen Sie Ihren Internetzugang!',
+                labelStatus: 'Status:',
+                valueStatus: 'Verbunden',
+                labelNetwork: 'Netzwerk:',
+                labelSpeed: 'Geschwindigkeit:',
+                labelDevice: 'Gerät:',
+                speedStandard: 'Standard',
+                speedFast: 'Schnell (Premium)',
+                deviceRegistered: 'Registriert',
+                fastNotice: 'Schnelles WLAN aktiviert! Die Zimmerreinigung wurde für Ihren Aufenthalt übersprungen.',
+                continueBtn: 'Weiter surfen',
+                redirectInfo: 'Sie werden automatisch in {seconds} Sekunden weitergeleitet',
+                accessDeniedTitle: 'Zugriff verweigert',
+                accessDeniedMessage: 'Diese Seite kann nur nach erfolgreicher Anmeldung aufgerufen werden.',
+                backToLogin: 'Zurück zur Anmeldung'
+            }
+        };
+
         // Get URL parameters
         function getUrlParameter(name) {
             name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
@@ -183,53 +250,91 @@
             return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
         }
         
-        // Get the original destination URL
-        const originalDestination = getUrlParameter('dst') || 'http://www.google.com';
-        const wifiSpeed = getUrlParameter('speed') || 'standard';
+        // Check access - must have valid token from login page
+        const accessToken = getUrlParameter('token');
+        const validAccess = accessToken && accessToken.length > 0;
         
-        // Update speed information
-        if (wifiSpeed === 'fast') {
-            document.getElementById('speed-info').textContent = 'Fast (Premium)';
-            document.getElementById('fast-wifi-notice').style.display = 'block';
-        }
+        // Get language preference (default to English)
+        const lang = getUrlParameter('lang') || 'en';
+        const t = translations[lang] || translations.en;
         
-        // Countdown timer
-        let countdown = 10;
-        const countdownElement = document.getElementById('countdown');
+        // Update HTML lang attribute
+        document.documentElement.lang = lang;
         
-        const timer = setInterval(() => {
-            countdown--;
-            countdownElement.textContent = countdown;
+        if (!validAccess) {
+            // Show access denied message
+            document.getElementById('success-container').innerHTML = `
+                <div class="access-denied">
+                    <div class="success-icon" style="background: #c62828;">✕</div>
+                    <h1>${t.accessDeniedTitle}</h1>
+                    <p class="success-message">${t.accessDeniedMessage}</p>
+                    <a href="login.html" class="back-link">${t.backToLogin}</a>
+                </div>
+            `;
+        } else {
+            // Apply translations
+            document.getElementById('title').textContent = t.title;
+            document.getElementById('message').textContent = t.message;
+            document.getElementById('label-status').textContent = t.labelStatus;
+            document.getElementById('value-status').textContent = t.valueStatus;
+            document.getElementById('label-network').textContent = t.labelNetwork;
+            document.getElementById('label-speed').textContent = t.labelSpeed;
+            document.getElementById('label-device').textContent = t.labelDevice;
+            document.getElementById('speed-info').textContent = t.speedStandard;
+            document.getElementById('device-info').textContent = t.deviceRegistered;
+            document.getElementById('continue-btn').textContent = t.continueBtn;
+            document.getElementById('fast-notice-text').textContent = t.fastNotice;
             
-            if (countdown <= 0) {
-                clearInterval(timer);
-                continueBrowsing();
+            // Get the original destination URL and speed
+            const originalDestination = getUrlParameter('dst') || 'http://www.google.com';
+            const wifiSpeed = getUrlParameter('speed') || 'standard';
+            
+            // Update speed information
+            if (wifiSpeed === 'fast') {
+                document.getElementById('speed-info').textContent = t.speedFast;
+                document.getElementById('fast-wifi-notice').style.display = 'block';
             }
-        }, 1000);
-        
-        // Continue browsing function
-        function continueBrowsing() {
-            // Close the popup window if it was opened as a popup
-            if (window.opener) {
-                window.close();
-            } else {
-                // Redirect to the original destination
-                window.location.href = originalDestination;
+            
+            // Faster countdown (3 seconds)
+            let countdown = 3;
+            const countdownElement = document.getElementById('countdown');
+            
+            // Update redirect info text
+            function updateRedirectText() {
+                document.getElementById('redirect-info').innerHTML = 
+                    t.redirectInfo.replace('{seconds}', `<span id="countdown">${countdown}</span>`);
+            }
+            updateRedirectText();
+            
+            const timer = setInterval(() => {
+                countdown--;
+                document.getElementById('countdown').textContent = countdown;
+                
+                if (countdown <= 0) {
+                    clearInterval(timer);
+                    continueBrowsing();
+                }
+            }, 1000);
+            
+            // Continue browsing function
+            window.continueBrowsing = function() {
+                // Close the popup window if it was opened as a popup
+                if (window.opener) {
+                    window.close();
+                } else {
+                    // Redirect to the original destination
+                    window.location.href = originalDestination;
+                }
+            };
+            
+            // If this page was loaded as a popup, show different behavior
+            if (getUrlParameter('popup') === 'true') {
+                // This is a popup window, so we'll auto-close it faster
+                setTimeout(() => {
+                    window.close();
+                }, 2000);
             }
         }
-        
-        // If this page was loaded as a popup, show different behavior
-        if (getUrlParameter('popup') === 'true') {
-            // This is a popup window, so we'll auto-close it
-            setTimeout(() => {
-                window.close();
-            }, 3000);
-        }
-        
-        // Auto-redirect after 10 seconds
-        setTimeout(() => {
-            continueBrowsing();
-        }, 10000);
     </script>
 </body>
 </html>
