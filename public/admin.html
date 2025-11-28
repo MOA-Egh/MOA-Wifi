@@ -208,8 +208,8 @@
                 <div class="stat-value" id="total-devices">-</div>
             </div>
             <div class="stat-card">
-                <h3>Fast WiFi Devices</h3>
-                <div class="stat-value" id="fast-devices">-</div>
+                <h3>Devices by Speed</h3>
+                <div id="devices-by-speed" style="font-size: 14px; margin-top: 10px;">-</div>
             </div>
             <div class="stat-card">
                 <h3>Active Rooms</h3>
@@ -235,12 +235,8 @@
                     <input type="text" id="filter-room" placeholder="All rooms">
                 </div>
                 <div class="filter-group">
-                    <label>Speed Type</label>
-                    <select id="filter-speed">
-                        <option value="">All speeds</option>
-                        <option value="fast">Fast only</option>
-                        <option value="normal">Normal only</option>
-                    </select>
+                    <label>Speed (Mbps)</label>
+                    <input type="number" id="filter-speed" placeholder="All speeds" min="1" max="100">
                 </div>
                 <div class="filter-group">
                     <label>Guest Surname</label>
@@ -259,7 +255,7 @@
                             <th>Room</th>
                             <th>Guest</th>
                             <th>Device MAC</th>
-                            <th>Speed</th>
+                            <th>Speed (Mbps)</th>
                             <th>Last Update</th>
                             <th>Actions</th>
                         </tr>
@@ -285,13 +281,12 @@
                             <th>Guest Surname</th>
                             <th>Cleaning Status</th>
                             <th>Device Count</th>
-                            <th>Fast Devices</th>
                             <th>Last Update</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td colspan="6" class="loading">Loading rooms...</td>
+                            <td colspan="5" class="loading">Loading rooms...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -306,7 +301,7 @@
             
             // Set up filter event listeners
             document.getElementById('filter-room').addEventListener('input', filterData);
-            document.getElementById('filter-speed').addEventListener('change', filterData);
+            document.getElementById('filter-speed').addEventListener('input', filterData);
             document.getElementById('filter-surname').addEventListener('input', filterData);
             
             // Auto-refresh every 30 seconds
@@ -322,10 +317,17 @@
                 const devicesResponse = await fetch('admin_api.php?action=get_devices');
                 const devicesData = await devicesResponse.json();
                 
+                // Load statistics
+                const statsResponse = await fetch('admin_api.php?action=get_statistics');
+                const statsData = await statsResponse.json();
+                
+                if (statsData.success) {
+                    updateStatistics(statsData.statistics);
+                }
+                
                 if (devicesData.success) {
                     allDevices = devicesData.devices;
                     updateDevicesTable();
-                    updateStatistics();
                 } else {
                     showError('Failed to load devices: ' + devicesData.error);
                 }
@@ -353,16 +355,20 @@
             }
         }
         
-        function updateStatistics() {
-            const totalDevices = allDevices.length;
-            const fastDevices = allDevices.filter(d => d.fast_mode).length;
-            const activeRooms = [...new Set(allDevices.map(d => d.room_number))].length;
-            const skipCleanRooms = allRooms.filter(r => r.skip_clean).length;
+        function updateStatistics(stats) {
+            document.getElementById('total-devices').textContent = stats.total_devices;
+            document.getElementById('active-rooms').textContent = stats.active_rooms;
+            document.getElementById('skip-clean-rooms').textContent = stats.skip_clean_rooms;
             
-            document.getElementById('total-devices').textContent = totalDevices;
-            document.getElementById('fast-devices').textContent = fastDevices;
-            document.getElementById('active-rooms').textContent = activeRooms;
-            document.getElementById('skip-clean-rooms').textContent = skipCleanRooms;
+            // Display devices by speed
+            const speedContainer = document.getElementById('devices-by-speed');
+            if (stats.devices_by_speed && stats.devices_by_speed.length > 0) {
+                speedContainer.innerHTML = stats.devices_by_speed.map(item => 
+                    `<div><strong>${item.speed} Mbps:</strong> ${item.count} device(s)</div>`
+                ).join('');
+            } else {
+                speedContainer.textContent = 'No devices';
+            }
         }
         
         function updateMewsStatus(status) {
@@ -392,15 +398,12 @@
                     <td>${device.surname}</td>
                     <td><code>${device.device_mac}</code></td>
                     <td>
-                        <span class="status-badge ${device.fast_mode ? 'status-fast' : 'status-normal'}">
-                            ${device.fast_mode ? 'Fast' : 'Normal'}
-                        </span>
+                        <input type="number" value="${device.speed}" min="1" max="100" 
+                               style="width: 60px; padding: 4px;" 
+                               onchange="updateDeviceSpeed('${device.device_mac}', this.value)">
                     </td>
                     <td>${new Date(device.last_update).toLocaleString()}</td>
                     <td>
-                        <button class="action-btn btn-toggle" onclick="toggleDeviceSpeed('${device.device_mac}')">
-                            ${device.fast_mode ? 'Make Normal' : 'Make Fast'}
-                        </button>
                         <button class="action-btn btn-remove" onclick="removeDevice('${device.device_mac}')">
                             Remove
                         </button>
@@ -413,14 +416,11 @@
             const tbody = document.querySelector('#rooms-table tbody');
             
             if (allRooms.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="loading">No room data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="loading">No room data found</td></tr>';
                 return;
             }
             
             tbody.innerHTML = allRooms.map(room => {
-                const roomDevices = allDevices.filter(d => d.room_number === room.room_number);
-                const fastDevices = roomDevices.filter(d => d.fast_mode);
-                
                 return `
                     <tr>
                         <td>${room.room_number}</td>
@@ -430,8 +430,7 @@
                                 ${room.skip_clean ? 'Skip Cleaning' : 'Normal Cleaning'}
                             </span>
                         </td>
-                        <td>${roomDevices.length}</td>
-                        <td>${fastDevices.length}</td>
+                        <td>${room.device_count}</td>
                         <td>${new Date(room.updated_at).toLocaleString()}</td>
                     </tr>
                 `;
@@ -445,9 +444,7 @@
             
             return allDevices.filter(device => {
                 const roomMatch = !roomFilter || device.room_number.toLowerCase().includes(roomFilter);
-                const speedMatch = !speedFilter || 
-                    (speedFilter === 'fast' && device.fast_mode) || 
-                    (speedFilter === 'normal' && !device.fast_mode);
+                const speedMatch = !speedFilter || device.speed === parseInt(speedFilter);
                 const surnameMatch = !surnameFilter || device.surname.toLowerCase().includes(surnameFilter);
                 
                 return roomMatch && speedMatch && surnameMatch;
@@ -458,29 +455,28 @@
             updateDevicesTable();
         }
         
-        async function toggleDeviceSpeed(mac) {
-            if (confirm('Are you sure you want to toggle the speed for this device?')) {
-                try {
-                    const response = await fetch('admin_api.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            action: 'toggle_device_speed',
-                            mac: mac
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    if (result.success) {
-                        loadData(); // Reload data
-                    } else {
-                        showError('Failed to toggle device speed: ' + result.error);
-                    }
-                } catch (error) {
-                    showError('Network error occurred');
+        async function updateDeviceSpeed(mac, speed) {
+            try {
+                const response = await fetch('admin_api.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'update_device_speed',
+                        mac: mac,
+                        speed: parseInt(speed)
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    loadData(); // Reload data
+                } else {
+                    showError('Failed to update device speed: ' + result.error);
                 }
+            } catch (error) {
+                showError('Network error occurred');
             }
         }
         

@@ -63,19 +63,36 @@
     <div class="section">
         <h2>🔍 MAC Address Detection Test</h2>
         <?php
-        // Include our authentication functions
-        require_once 'authenticate.php';
-        
-        try {
-            $detected_mac = getClientMAC();
-            echo "<p><strong>✅ Detected MAC:</strong> <code>$detected_mac</code></p>";
-            
-            if (isDevelopmentMode()) {
-                echo "<p><em>🧪 Running in development mode - MAC generated for testing</em></p>";
+        // Test MAC detection functions
+        function testGetClientMAC() {
+            // Method 0: RouterOS template variables (most reliable)
+            if (isset($_POST['client_mac']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_POST['client_mac'])) {
+                return ['mac' => strtoupper(str_replace('-', ':', $_POST['client_mac'])), 'method' => 'POST client_mac'];
             }
-        } catch (Exception $e) {
-            echo "<p><strong>❌ MAC Detection Failed:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
+            
+            if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_SERVER['HTTP_X_FORWARDED_FOR'])) {
+                return ['mac' => strtoupper(str_replace('-', ':', $_SERVER['HTTP_X_FORWARDED_FOR'])), 'method' => 'HTTP_X_FORWARDED_FOR'];
+            }
+            
+            if (isset($_SERVER['HTTP_X_MAC_ADDRESS'])) {
+                return ['mac' => strtoupper(str_replace('-', ':', $_SERVER['HTTP_X_MAC_ADDRESS'])), 'method' => 'HTTP_X_MAC_ADDRESS'];
+            }
+            
+            if (isset($_GET['mac']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_GET['mac'])) {
+                return ['mac' => strtoupper(str_replace('-', ':', $_GET['mac'])), 'method' => 'GET mac'];
+            }
+            
+            // Development fallback
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
+            $hash = md5($ip . $userAgent);
+            $mac = sprintf("02:%s:%s:%s:%s:%s", substr($hash, 0, 2), substr($hash, 2, 2), substr($hash, 4, 2), substr($hash, 6, 2), substr($hash, 8, 2));
+            return ['mac' => $mac, 'method' => 'Development fallback (generated)'];
         }
+        
+        $result = testGetClientMAC();
+        echo "<p><strong>✅ Detected MAC:</strong> <code>" . $result['mac'] . "</code></p>";
+        echo "<p><strong>Detection Method:</strong> " . $result['method'] . "</p>";
         ?>
     </div>
 
@@ -83,8 +100,8 @@
         <h2>🏨 Mews Connection Test</h2>
         <?php
         try {
-            require_once 'mews_wifi_auth.php';
-            $mews_config = require 'mews_config.php';
+            require_once __DIR__ . '/../src/MewsWifiAuth.php';
+            $mews_config = require __DIR__ . '/../config/mews_config.php';
             $mews_auth = new MewsWifiAuth($mews_config['mews']['environment']);
             $env_info = $mews_auth->getEnvironmentInfo();
             
@@ -101,7 +118,7 @@
         <h2>💾 Database Connection Test</h2>
         <?php
         try {
-            $db_config = require 'config.php';
+            $db_config = require __DIR__ . '/../config/config.php';
             $pdo = new PDO(
                 "mysql:host={$db_config['host']};dbname={$db_config['database']};charset=utf8",
                 $db_config['username'],

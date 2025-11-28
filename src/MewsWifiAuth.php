@@ -4,7 +4,7 @@
  * Adapts the Mews connector for WiFi authentication system
  */
 
-require_once 'mews_connector.php';
+require_once __DIR__ . '/MewsConnector.php';
 
 class MewsWifiAuth {
     private $mews;
@@ -15,7 +15,7 @@ class MewsWifiAuth {
         $this->environment = $environment;
         
         // Load config
-        $configPath = $configFile ?: __DIR__ . '/mews_config.php';
+        $configPath = $configFile ?: __DIR__ . '/../config/mews_config.php';
         if (file_exists($configPath)) {
             $this->config = require $configPath;
             

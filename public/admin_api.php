@@ -10,8 +10,8 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
 header('Access-Control-Allow-Headers: Content-Type');
 
 // Include configuration and Mews integration
-$db_config = require 'config.php';
-require_once 'mews_wifi_auth.php';
+$db_config = require __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../src/MewsWifiAuth.php';
 
 /**
  * Connect to database
@@ -57,7 +57,7 @@ function getDevices($pdo) {
             device_mac,
             room_number,
             surname,
-            fast_mode,
+            speed,
             last_update,
             created_at
         FROM authorized_devices 
@@ -66,9 +66,9 @@ function getDevices($pdo) {
     
     $devices = $stmt->fetchAll();
     
-    // Convert boolean values for JSON
+    // Convert speed to integer
     foreach ($devices as &$device) {
-        $device['fast_mode'] = (bool)$device['fast_mode'];
+        $device['speed'] = (int)$device['speed'];
     }
     
     return $devices;
@@ -85,8 +85,7 @@ function getRooms($pdo) {
             r.guest_surname,
             r.skip_clean,
             r.updated_at,
-            COUNT(d.device_mac) as device_count,
-            SUM(CASE WHEN d.fast_mode = 1 THEN 1 ELSE 0 END) as fast_device_count
+            COUNT(d.device_mac) as device_count
         FROM rooms_to_skip r
         LEFT JOIN authorized_devices d ON r.room_number = d.room_number
         GROUP BY r.room_number, r.guest_surname, r.skip_clean, r.updated_at
@@ -97,7 +96,7 @@ function getRooms($pdo) {
     
     // Get current reservations from Mews
     try {
-        $mews_config = require 'mews_config.php';
+        $mews_config = require __DIR__ . '/../config/mews_config.php';
         $mews_auth = new MewsWifiAuth($mews_config['mews']['environment']);
         $mews_reservations = $mews_auth->getTodaysReservations();
         
@@ -122,20 +121,25 @@ function getRooms($pdo) {
         // Continue without Mews data
     }
     
-    // Convert boolean values for JSON
+    // Convert values for JSON
     foreach ($rooms as &$room) {
         $room['skip_clean'] = (bool)$room['skip_clean'];
         $room['device_count'] = (int)$room['device_count'];
-        $room['fast_device_count'] = (int)$room['fast_device_count'];
     }
     
     return $rooms;
 }
 
 /**
- * Toggle device speed mode
+ * Update device speed
  */
-function toggleDeviceSpeed($pdo, $mac) {
+function updateDeviceSpeed($pdo, $mac, $speed) {
+    // Validate speed value
+    $speed = (int)$speed;
+    if ($speed < 1 || $speed > 100) {
+        throw new Exception("Speed must be between 1 and 100 Mbps");
+    }
+    
     // Get current device info
     $stmt = $pdo->prepare("SELECT * FROM authorized_devices WHERE device_mac = ?");
     $stmt->execute([$mac]);
@@ -145,30 +149,13 @@ function toggleDeviceSpeed($pdo, $mac) {
         throw new Exception("Device not found");
     }
     
-    $newFastMode = !$device['fast_mode'];
-    
-    // If switching to fast mode, check device limit for the room
-    if ($newFastMode) {
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*) as count 
-            FROM authorized_devices 
-            WHERE room_number = ? AND fast_mode = TRUE AND device_mac != ?
-        ");
-        $stmt->execute([$device['room_number'], $mac]);
-        $currentFastDevices = $stmt->fetch()['count'];
-        
-        if ($currentFastDevices >= 3) {
-            throw new Exception("Room already has maximum of 3 fast devices");
-        }
-    }
-    
-    // Update device
+    // Update device speed
     $stmt = $pdo->prepare("
         UPDATE authorized_devices 
-        SET fast_mode = ?, last_update = CURRENT_TIMESTAMP 
+        SET speed = ?, last_update = CURRENT_TIMESTAMP 
         WHERE device_mac = ?
     ");
-    $stmt->execute([$newFastMode, $mac]);
+    $stmt->execute([$speed, $mac]);
     
     return true;
 }
@@ -195,9 +182,9 @@ function getStatistics($pdo) {
     $stmt = $pdo->query("SELECT COUNT(*) as count FROM authorized_devices");
     $totalDevices = $stmt->fetch()['count'];
     
-    // Fast devices
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM authorized_devices WHERE fast_mode = TRUE");
-    $fastDevices = $stmt->fetch()['count'];
+    // Devices by speed
+    $stmt = $pdo->query("SELECT speed, COUNT(*) as count FROM authorized_devices GROUP BY speed ORDER BY speed");
+    $devicesBySpeed = $stmt->fetchAll();
     
     // Active rooms
     $stmt = $pdo->query("SELECT COUNT(DISTINCT room_number) as count FROM authorized_devices");
@@ -209,7 +196,7 @@ function getStatistics($pdo) {
     
     return [
         'total_devices' => (int)$totalDevices,
-        'fast_devices' => (int)$fastDevices,
+        'devices_by_speed' => $devicesBySpeed,
         'active_rooms' => (int)$activeRooms,
         'skip_clean_rooms' => (int)$skipCleanRooms
     ];
@@ -220,7 +207,7 @@ function getStatistics($pdo) {
  */
 function getMewsStatus() {
     try {
-        $mews_config = require 'mews_config.php';
+        $mews_config = require __DIR__ . '/../config/mews_config.php';
         $mews_auth = new MewsWifiAuth($mews_config['mews']['environment']);
         
         // Try to get environment info
@@ -291,14 +278,18 @@ try {
         $action = $input['action'] ?? null;
         
         switch ($action) {
-            case 'toggle_device_speed':
+            case 'update_device_speed':
                 $mac = $input['mac'] ?? null;
+                $speed = $input['speed'] ?? null;
                 if (!$mac) {
                     sendResponse(false, null, 'MAC address required');
                 }
+                if ($speed === null) {
+                    sendResponse(false, null, 'Speed value required');
+                }
                 
-                toggleDeviceSpeed($pdo, $mac);
-                sendResponse(true, ['message' => 'Device speed toggled successfully']);
+                updateDeviceSpeed($pdo, $mac, $speed);
+                sendResponse(true, ['message' => 'Device speed updated successfully']);
                 break;
                 
             case 'remove_device':

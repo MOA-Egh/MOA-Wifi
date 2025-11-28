@@ -5,13 +5,13 @@
  */
 
 // Include required files
-require_once 'mews_wifi_auth.php';
+require_once __DIR__ . '/../src/MewsWifiAuth.php';
 
 // Database configuration - Update with your actual database credentials
-$db_config = require 'config.php';
+$db_config = require __DIR__ . '/../config/config.php';
 
 // Mews PMS Configuration
-$mews_config = require 'mews_config.php';
+$mews_config = require __DIR__ . '/../config/mews_config.php';
 $mews_environment = $mews_config['mews']['environment'];
 
 // RouterOS HotSpot variables
@@ -54,15 +54,15 @@ function validateGuest($mews_auth, $room_number, $surname) {
 }
 
 /**
- * Check how many devices are already registered for fast WiFi in this room
+ * Get devices count by speed for a room
  */
-function getFastDeviceCount($pdo, $room_number) {
+function getDeviceCountBySpeed($pdo, $room_number, $speed) {
     $stmt = $pdo->prepare("
         SELECT COUNT(*) as count 
         FROM authorized_devices 
-        WHERE room_number = ? AND fast_mode = TRUE
+        WHERE room_number = ? AND speed = ?
     ");
-    $stmt->execute([$room_number]);
+    $stmt->execute([$room_number, $speed]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return $result['count'];
 }
@@ -82,7 +82,7 @@ function isDeviceRegistered($pdo, $mac_address) {
 /**
  * Register or update device
  */
-function registerDevice($pdo, $mac_address, $room_number, $surname, $fast_mode) {
+function registerDevice($pdo, $mac_address, $room_number, $surname, $speed) {
     // Check if device already exists
     $existing = isDeviceRegistered($pdo, $mac_address);
     
@@ -90,17 +90,17 @@ function registerDevice($pdo, $mac_address, $room_number, $surname, $fast_mode) 
         // Update existing device
         $stmt = $pdo->prepare("
             UPDATE authorized_devices 
-            SET room_number = ?, surname = ?, fast_mode = ?, last_update = CURRENT_TIMESTAMP 
+            SET room_number = ?, surname = ?, speed = ?, last_update = CURRENT_TIMESTAMP 
             WHERE device_mac = ?
         ");
-        $stmt->execute([$room_number, $surname, $fast_mode, $mac_address]);
+        $stmt->execute([$room_number, $surname, $speed, $mac_address]);
     } else {
         // Insert new device
         $stmt = $pdo->prepare("
-            INSERT INTO authorized_devices (device_mac, room_number, surname, fast_mode) 
+            INSERT INTO authorized_devices (device_mac, room_number, surname, speed) 
             VALUES (?, ?, ?, ?)
         ");
-        $stmt->execute([$mac_address, $room_number, $surname, $fast_mode]);
+        $stmt->execute([$mac_address, $room_number, $surname, $speed]);
     }
 }
 
@@ -226,7 +226,7 @@ function getMACFromIP($ip) {
  * Check if we're in development mode
  */
 function isDevelopmentMode() {
-    $mews_config = require 'mews_config.php';
+    $mews_config = require __DIR__ . '/../config/mews_config.php';
     return isset($mews_config['development']['use_fallback_when_api_fails']) && 
            $mews_config['development']['use_fallback_when_api_fails'] === true;
 }
@@ -285,35 +285,19 @@ try {
         redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.");
     }
     
-    // Determine if fast mode is requested
-    $fast_mode = ($wifi_speed === 'fast');
+    // Determine speed based on selection (fast = 50 Mbps, normal = 20 Mbps)
+    $speed = ($wifi_speed === 'fast') ? 50 : 20;
     
-    // If fast mode requested, check device limit
-    if ($fast_mode) {
-        $current_fast_devices = getFastDeviceCount($pdo, $username);
-        $existing_device = isDeviceRegistered($pdo, $mac_address);
-        
-        // If this device isn't already registered and we're at the limit, deny fast access
-        if (!$existing_device && $current_fast_devices >= 3) {
-            redirectToError("Maximum 3 devices per room can use fast WiFi. This device will be connected with standard speed.");
-        }
-        
-        // If we already have 3 devices and this device is registered but not in fast mode
-        if ($existing_device && !$existing_device['fast_mode'] && $current_fast_devices >= 3) {
-            redirectToError("Maximum 3 devices per room can use fast WiFi. This device will be connected with standard speed.");
-        }
-    }
+    // Register the device with the selected speed
+    registerDevice($pdo, $mac_address, $username, $surname, $speed);
     
-    // Register the device
-    registerDevice($pdo, $mac_address, $username, $surname, $fast_mode);
-    
-    // Update room cleaning preference if fast mode is selected
-    if ($fast_mode) {
+    // Update room cleaning preference if fast speed is selected
+    if ($speed >= 50) {
         updateRoomSkipPreference($pdo, $username, $surname, true);
     }
     
     // Log the successful authentication
-    error_log("WiFi access granted - Room: $username, Device: $mac_address, Fast: " . ($fast_mode ? 'Yes' : 'No'));
+    error_log("WiFi access granted - Room: $username, Device: $mac_address, Speed: {$speed} Mbps");
     
     // For RouterOS integration, you might need to set additional variables or call RouterOS API
     // This depends on your specific RouterOS configuration

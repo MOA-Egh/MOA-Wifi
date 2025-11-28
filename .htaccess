@@ -1,0 +1,22 @@
+# MOA WiFi - Rewrite to public folder
+# Since XAMPP serves from htdocs, we rewrite requests to public/
+
+RewriteEngine On
+RewriteBase /MOA-Wifi/
+
+# If requesting a file/folder that exists in public, serve it
+RewriteCond %{REQUEST_URI} ^/MOA-Wifi/(.*)$
+RewriteCond %{DOCUMENT_ROOT}/MOA-Wifi/public/%1 -f [OR]
+RewriteCond %{DOCUMENT_ROOT}/MOA-Wifi/public/%1 -d
+RewriteRule ^(.*)$ public/$1 [L]
+
+# If not a real file/folder at root, try public folder
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ public/$1 [L]
+
+# Block direct access to sensitive directories
+RewriteRule ^config/ - [F,L]
+RewriteRule ^src/ - [F,L]
+RewriteRule ^database/ - [F,L]
+RewriteRule ^docs/ - [F,L]

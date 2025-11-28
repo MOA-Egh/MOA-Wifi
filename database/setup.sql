@@ -11,20 +11,20 @@ CREATE TABLE IF NOT EXISTS authorized_devices (
     device_mac VARCHAR(17) NOT NULL UNIQUE,
     room_number VARCHAR(10) NOT NULL,
     surname VARCHAR(100) NOT NULL,
-    fast_mode BOOLEAN DEFAULT FALSE,
+    speed INTEGER DEFAULT 20,
     last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_room_number (room_number),
     INDEX idx_device_mac (device_mac),
-    INDEX idx_fast_mode (fast_mode)
+    INDEX idx_speed (speed)
 );
 
--- Table to store room cleaning skip preferences
+
 CREATE TABLE IF NOT EXISTS rooms_to_skip (
     id INT AUTO_INCREMENT PRIMARY KEY,
     room_number VARCHAR(10) NOT NULL UNIQUE,
-    skip_clean BOOLEAN DEFAULT FALSE,
     guest_surname VARCHAR(100) NOT NULL,
+    skip_clean BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_room_number (room_number)
@@ -34,13 +34,11 @@ CREATE TABLE IF NOT EXISTS rooms_to_skip (
 CREATE OR REPLACE VIEW room_device_count AS
 SELECT 
     room_number,
-    COUNT(*) as total_devices,
-    SUM(CASE WHEN fast_mode = TRUE THEN 1 ELSE 0 END) as fast_devices,
+    speed,
+    COUNT(*) as device_count,
     MAX(last_update) as last_activity
 FROM authorized_devices 
-GROUP BY room_number;
+GROUP BY room_number, speed;
 
--- Note: Reservations are now handled via PMS API integration
--- No local reservations table needed
 
 COMMIT;
