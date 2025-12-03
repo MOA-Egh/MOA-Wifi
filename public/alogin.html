@@ -212,12 +212,12 @@
                 labelNetwork: 'Network:',
                 labelSpeed: 'Speed:',
                 labelDevice: 'Device:',
-                speedStandard: 'Standard',
-                speedFast: 'Fast (Premium)',
+                speedStandard: 'Standard (10 Mbps)',
+                speedFast: 'Fast (20 Mbps)',
                 deviceRegistered: 'Registered',
                 fastNotice: 'Fast WiFi activated! Room cleaning has been skipped for your stay.',
                 continueBtn: 'Continue Browsing',
-                redirectInfo: 'You will be redirected automatically in {seconds} seconds',
+                redirectInfo: 'Connecting to WiFi in {seconds} seconds...',
                 accessDeniedTitle: 'Access Denied',
                 accessDeniedMessage: 'This page can only be accessed after successful login.',
                 backToLogin: 'Back to Login'
@@ -230,12 +230,12 @@
                 labelNetwork: 'Netzwerk:',
                 labelSpeed: 'Geschwindigkeit:',
                 labelDevice: 'Gerät:',
-                speedStandard: 'Standard',
-                speedFast: 'Schnell (Premium)',
+                speedStandard: 'Standard (10 Mbps)',
+                speedFast: 'Schnell (20 Mbps)',
                 deviceRegistered: 'Registriert',
                 fastNotice: 'Schnelles WLAN aktiviert! Die Zimmerreinigung wurde für Ihren Aufenthalt übersprungen.',
                 continueBtn: 'Weiter surfen',
-                redirectInfo: 'Sie werden automatisch in {seconds} Sekunden weitergeleitet',
+                redirectInfo: 'Verbindung zum WLAN in {seconds} Sekunden...',
                 accessDeniedTitle: 'Zugriff verweigert',
                 accessDeniedMessage: 'Diese Seite kann nur nach erfolgreicher Anmeldung aufgerufen werden.',
                 backToLogin: 'Zurück zur Anmeldung'
@@ -257,6 +257,12 @@
         // Get language preference (default to English)
         const lang = getUrlParameter('lang') || 'en';
         const t = translations[lang] || translations.en;
+        
+        // MikroTik login parameters
+        const linkLogin = getUrlParameter('link_login');
+        const mtUser = getUrlParameter('mt_user');
+        const mtPass = getUrlParameter('mt_pass');
+        const hasMikroTikLogin = linkLogin && mtUser && mtPass;
         
         // Update HTML lang attribute
         document.documentElement.lang = lang;
@@ -285,8 +291,7 @@
             document.getElementById('continue-btn').textContent = t.continueBtn;
             document.getElementById('fast-notice-text').textContent = t.fastNotice;
             
-            // Get the original destination URL and speed
-            const originalDestination = getUrlParameter('dst') || 'http://www.google.com';
+            // Get speed from URL
             const wifiSpeed = getUrlParameter('speed') || 'standard';
             
             // Update speed information
@@ -295,9 +300,8 @@
                 document.getElementById('fast-wifi-notice').style.display = 'block';
             }
             
-            // Faster countdown (3 seconds)
+            // Countdown timer (3 seconds before auto-login)
             let countdown = 3;
-            const countdownElement = document.getElementById('countdown');
             
             // Update redirect info text
             function updateRedirectText() {
@@ -316,20 +320,45 @@
                 }
             }, 1000);
             
-            // Continue browsing function
+            // Continue browsing / MikroTik login function
             window.continueBrowsing = function() {
-                // Close the popup window if it was opened as a popup
-                if (window.opener) {
+                if (hasMikroTikLogin) {
+                    // Auto-submit to MikroTik hotspot login
+                    performMikroTikLogin();
+                } else if (window.opener) {
+                    // Close popup window
                     window.close();
                 } else {
-                    // Redirect to the original destination
-                    window.location.href = originalDestination;
+                    // Fallback: redirect to Google
+                    window.location.href = 'http://www.google.com';
                 }
             };
             
-            // If this page was loaded as a popup, show different behavior
-            if (getUrlParameter('popup') === 'true') {
-                // This is a popup window, so we'll auto-close it faster
+            // MikroTik hotspot login via form submission
+            function performMikroTikLogin() {
+                // Create and submit form to MikroTik
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = linkLogin || 'http://10.5.50.1/login';
+                
+                const userInput = document.createElement('input');
+                userInput.type = 'hidden';
+                userInput.name = 'username';
+                userInput.value = mtUser;
+                form.appendChild(userInput);
+                
+                const passInput = document.createElement('input');
+                passInput.type = 'hidden';
+                passInput.name = 'password';
+                passInput.value = mtPass;
+                form.appendChild(passInput);
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+            
+            // If popup, auto-close faster
+            if (getUrlParameter('popup') === 'true' && !hasMikroTikLogin) {
                 setTimeout(() => {
                     window.close();
                 }, 2000);

@@ -26,16 +26,16 @@ class MewsConnector
             }
         }
         
-        // Set service IDs from config or use defaults
-        if (isset($this->config['mews']['service_ids'])) {
-            $this->serviceIds = $this->config['mews']['service_ids'];
-        } else {
-            $this->serviceIds = [
-                '4444f78b-ca4f-4802-be17-acc501177efe', // Id of the Stay Service
-                'af7a7d60-c9ba-402c-a761-b1b700fb3106', // Id of the DayUse Service
-                '63952eb6-5908-4b66-9955-acd100d550d6'  // Id of the Employee Rooms Service
-            ];
-        }
+        // // Set service IDs from config or use defaults
+        // if (isset($this->config['mews']['service_ids'])) {
+        //     $this->serviceIds = $this->config['mews']['service_ids'];
+        // } else {
+        //     $this->serviceIds = [
+        //         '4444f78b-ca4f-4802-be17-acc501177efe', // Id of the Stay Service
+        //         'af7a7d60-c9ba-402c-a761-b1b700fb3106', // Id of the DayUse Service
+        //         '63952eb6-5908-4b66-9955-acd100d550d6'  // Id of the Employee Rooms Service
+        //     ];
+        // }
         // Initialize based on environment
         $this->initializeEnvironment($environment);
     }
@@ -211,13 +211,25 @@ class MewsConnector
         // Execute the cURL request and get the response
         $response = curl_exec($curl);
         $httpcode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        if ($httpcode != 200) {
-            echo $httpcode, PHP_EOL;
-            var_dump($response);
-            exit;
+        $curlError = curl_error($curl);
+        
+        // Check for cURL errors
+        if ($response === false) {
+            throw new Exception("cURL error: " . $curlError);
         }
+        
+        // Check for non-200 HTTP status
+        if ($httpcode != 200) {
+            error_log("Mews API error: HTTP $httpcode - $response");
+            throw new Exception("Mews API returned HTTP $httpcode");
+        }
+        
         // Decode the response from JSON and return it
         $response = json_decode($response, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception("Failed to parse JSON response: " . json_last_error_msg());
+        }
 
         return $response;
     }
@@ -474,7 +486,7 @@ class MewsConnector
 
             // Get reservations for today
             $params = [
-                'TimeFilter' => [
+                'CollidingUtc' => [
                     'StartUtc' => $startOfDay,
                     'EndUtc' => $endOfDay
                 ],
@@ -551,13 +563,14 @@ class MewsConnector
      * @param string $customerId The customer ID
      * @return array|false Customer details or false if not found
      */
-    private function getCustomerDetails($customerId)
+    private function getCustomerDetails($customerLastName)
     {
         try {
             $endpoint = "/customers/getAll";
             
             $params = [
-                'CustomerIds' => [$customerId]
+                'LastNames' => [$customerLastName],
+                'Extent' => ['Customers' => true]
             ];
 
             $response = $this->sendRequest($endpoint, $params);

@@ -22,6 +22,7 @@ $surname = $_POST['radius1'] ?? '';   // Guest surname
 $wifi_speed = $_POST['radius2'] ?? 'normal'; // WiFi speed preference
 $dst = $_POST['dst'] ?? 'http://www.google.com';
 $lang = $_POST['lang'] ?? 'en'; // Language preference from login page
+$linkLogin = $_POST['link_login'] ?? $_POST['link-login'] ?? ''; // MikroTik login URL
 
 // For RouterOS, you might need to get the MAC address differently
 // In a real RouterOS environment, this would be available as a server variable
@@ -43,7 +44,8 @@ function connectDB($config) {
         return $pdo;
     } catch (PDOException $e) {
         error_log("Database connection failed: " . $e->getMessage());
-        redirectToError("Database connection failed");
+        global $lang;
+        redirectToError("Database connection failed", $lang ?? 'en');
     }
 }
 
@@ -129,14 +131,91 @@ function redirectToError($message, $lang = 'en') {
 }
 
 /**
- * Redirect to success page
+ * Redirect to success page with MikroTik auto-login support
  */
-function redirectToSuccess($dst, $speed, $lang) {
+function redirectToSuccess($linkLogin, $username, $surname, $lang, $speed) {
     // Generate a simple token to validate access came from login
-    $token = base64_encode(hash('sha256', session_id() . time() . $dst, true));
-    $speedLabel = ($speed >= 50) ? 'fast' : 'standard';
-    header("Location: alogin.html?dst=" . urlencode($dst) . "&speed=" . $speedLabel . "&lang=" . $lang . "&token=" . urlencode($token));
+    $token = base64_encode(hash('sha256', session_id() . time(), true));
+    $speedLabel = ($speed >= 20) ? 'fast' : 'standard';
+    $mtUser = 'room' . $username;
+    
+    // Build query parameters for success page
+    $params = http_build_query([
+        'lang' => $lang,
+        'speed' => $speedLabel,
+        'token' => $token,
+        'link_login' => $linkLogin,
+        'mt_user' => $mtUser,
+        'mt_pass' => $surname
+    ]);
+    
+    header("Location: alogin.html?" . $params);
     exit();
+}
+
+/**
+ * Configure MikroTik hotspot user via API
+ */
+function configureMikroTikUser($config, $roomNumber, $surname, $profile) {
+    // Check if MikroTik integration is enabled
+    if (!isset($config['mikrotik']['enabled']) || !$config['mikrotik']['enabled']) {
+        return true; // Skip if not enabled
+    }
+    
+    // Check if RouterOS API library is available
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php')) {
+        error_log("MikroTik API: vendor/autoload.php not found. Run 'composer require evilfreelancer/routeros-api-php'");
+        return false;
+    }
+    
+    require_once __DIR__ . '/../vendor/autoload.php';
+    
+    if (!class_exists('RouterOS\Client')) {
+        error_log("MikroTik API: RouterOS\Client class not found. Run 'composer require evilfreelancer/routeros-api-php'");
+        return false;
+    }
+    
+    try {
+        $client = new \RouterOS\Client([
+            'host' => $config['mikrotik']['host'],
+            'user' => $config['mikrotik']['user'],
+            'pass' => $config['mikrotik']['pass'],
+            'port' => $config['mikrotik']['port']
+        ]);
+        
+        // Use Room Number as MikroTik Username
+        $mtUsername = 'room' . $roomNumber;
+        
+        // Check if user already exists
+        $query = new \RouterOS\Query('/ip/hotspot/user/print');
+        $query->where('name', $mtUsername);
+        $existingUser = $client->query($query)->read();
+        
+        if (empty($existingUser)) {
+            // Create new user
+            $addQuery = new \RouterOS\Query('/ip/hotspot/user/add');
+            $addQuery->equal('name', $mtUsername);
+            $addQuery->equal('password', $surname);
+            $addQuery->equal('profile', $profile);
+            $addQuery->equal('comment', 'Created via WiFi Portal - ' . date('Y-m-d H:i:s'));
+            $client->query($addQuery)->read();
+            error_log("MikroTik: Created user $mtUsername with profile $profile");
+        } else {
+            // Update existing user
+            $setQuery = new \RouterOS\Query('/ip/hotspot/user/set');
+            $setQuery->equal('.id', $existingUser[0]['.id']);
+            $setQuery->equal('profile', $profile);
+            $setQuery->equal('password', $surname);
+            $client->query($setQuery)->read();
+            error_log("MikroTik: Updated user $mtUsername to profile $profile");
+        }
+        
+        return true;
+        
+    } catch (Exception $e) {
+        error_log("MikroTik API Error: " . $e->getMessage());
+        return false;
+    }
 }
 
 /**
@@ -294,25 +373,38 @@ try {
         redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.", $lang);
     }
     
-    // Determine speed based on selection (fast = 50 Mbps, normal = 20 Mbps)
-    $speed = ($wifi_speed === 'fast') ? 50 : 20;
+    // Map speed selection to MikroTik profile and numeric speed for database
+    $profileMap = $db_config['mikrotik']['profiles'] ?? [
+        'normal' => 'hm_10M',
+        'fast'   => 'hm_20M'
+    ];
+    $selectedProfile = $profileMap[$wifi_speed] ?? $profileMap['normal'];
     
-    // Register the device with the selected speed
-    registerDevice($pdo, $mac_address, $username, $surname, $speed);
+    // Store numeric speed in database (10 Mbps for normal, 20 Mbps for fast)
+    $numericSpeed = ($wifi_speed === 'fast') ? 20 : 10;
     
-    // Update room cleaning preference if fast speed is selected
-    if ($speed >= 50) {
+    // Configure MikroTik hotspot user
+    $mikrotikSuccess = configureMikroTikUser($db_config, $username, $surname, $selectedProfile);
+    if (!$mikrotikSuccess && ($db_config['mikrotik']['enabled'] ?? false)) {
+        // Only fail if MikroTik is enabled but failed
+        redirectToError("WiFi system temporarily unavailable. Please try again or contact reception.", $lang);
+    }
+    
+    // Register the device in database for admin tracking
+    registerDevice($pdo, $mac_address, $username, $surname, $numericSpeed);
+    
+    // Update room cleaning preference based on speed selection
+    if ($wifi_speed === 'fast') {
         updateRoomSkipPreference($pdo, $username, $surname, true);
+    } else {
+        updateRoomSkipPreference($pdo, $username, $surname, false);
     }
     
     // Log the successful authentication
-    error_log("WiFi access granted - Room: $username, Device: $mac_address, Speed: {$speed} Mbps");
+    error_log("WiFi access granted - Room: $username, Device: $mac_address, Speed: {$numericSpeed} Mbps, Profile: $selectedProfile");
     
-    // For RouterOS integration, you might need to set additional variables or call RouterOS API
-    // This depends on your specific RouterOS configuration
-    
-    // Redirect to success page
-    redirectToSuccess($dst, $speed, $lang);
+    // Redirect to success page (which will auto-login to MikroTik)
+    redirectToSuccess($linkLogin, $username, $surname, $lang, $numericSpeed);
     
 } catch (Exception $e) {
     error_log("Authentication error: " . $e->getMessage());
