@@ -107,8 +107,8 @@ class MewsConnector
             return $this->config['mews']['ini_paths'][$environment];
         }
         
-        // Use default paths
-        return "/ini/{$environment}_mews.ini";
+        // Use default path relative to config directory
+        return __DIR__ . "/../config/ini/{$environment}_mews.ini";
     }
     
     /**
@@ -470,85 +470,74 @@ class MewsConnector
 
     /**
      * Validates guest credentials for WiFi access
-     * Checks if a guest with the given room number and surname has an active reservation for today
+     * Uses room_id to filter reservations by AssignedResourceIds, then validates the customer's LastName
      *
-     * @param string $roomNumber The room number to check
-     * @param string $guestSurname The guest's surname
+     * @param string $roomId The Mews resource ID (room_id from database)
+     * @param string $roomNumber The room number (for return data)
+     * @param string $guestSurname The guest's surname to validate
      * @return array|false Returns reservation data if valid, false otherwise
      */
-    public function validateGuestForWifi($roomNumber, $guestSurname)
+    public function validateGuestForWifi($roomId, $roomNumber, $guestSurname)
     {
         try {
-            // Get today's date in UTC format
-            $today = date('Y-m-d\TH:i:s\Z');
+            // Get today's date range in UTC format
             $startOfDay = date('Y-m-d\T00:00:00\Z');
             $endOfDay = date('Y-m-d\T23:59:59\Z');
 
-            // Get reservations for today
+            // Get reservations for today, filtered by the specific room (resource)
             $params = [
                 'CollidingUtc' => [
                     'StartUtc' => $startOfDay,
                     'EndUtc' => $endOfDay
                 ],
-                'States' => ['Confirmed', 'Started', 'Processed'] // Only active reservations
+                'States' => ['Confirmed', 'Started'], // Active reservations only
+                'AssignedResourceIds' => [$roomId]    // Filter by the specific room
             ];
 
             $reservations = $this->getReservations($params);
             
-            if (!isset($reservations['Reservations'])) {
+            if (!isset($reservations['Reservations']) || empty($reservations['Reservations'])) {
+                error_log("No reservations found for room ID: $roomId");
                 return false;
             }
 
-            // Get resources (rooms) to map resource IDs to room numbers
-            $resources = $this->getResources();
-            $roomMap = [];
-            
-            if (isset($resources['Resources'])) {
-                foreach ($resources['Resources'] as $resource) {
-                    if (isset($resource['Number']) && isset($resource['Id'])) {
-                        $roomMap[$resource['Id']] = $resource['Number'];
-                    }
-                }
-            }
-
-            // Check each reservation
+            // Process each reservation for this room
             foreach ($reservations['Reservations'] as $reservation) {
-                // Check if reservation is for the requested room
-                $reservationRoomNumber = null;
-                if (isset($reservation['AssignedResourceId']) && isset($roomMap[$reservation['AssignedResourceId']])) {
-                    $reservationRoomNumber = $roomMap[$reservation['AssignedResourceId']];
-                }
-
-                // Skip if room doesn't match
-                if ($reservationRoomNumber !== $roomNumber) {
+                // Get the AccountId (the customer who booked the reservation)
+                $accountId = $reservation['AccountId'] ?? null;
+                
+                if (!$accountId) {
+                    error_log("No AccountId found for reservation: " . ($reservation['Id'] ?? 'unknown'));
                     continue;
                 }
 
-                // Check if reservation is active for today
-                $startDate = strtotime($reservation['StartUtc']);
-                $endDate = strtotime($reservation['EndUtc']);
-                $todayTimestamp = strtotime($today);
+                // Get customer details using CustomerIds filter
+                $customer = $this->getCustomerById($accountId);
+                
+                if (!$customer) {
+                    error_log("Customer not found for AccountId: $accountId");
+                    continue;
+                }
 
-                if ($todayTimestamp >= $startDate && $todayTimestamp <= $endDate) {
-                    // Get customer details to check surname
-                    if (isset($reservation['CustomerId'])) {
-                        $customerDetails = $this->getCustomerDetails($reservation['CustomerId']);
-                        
-                        if ($customerDetails && $this->matchesSurname($customerDetails, $guestSurname)) {
-                            return [
-                                'valid' => true,
-                                'room_number' => $roomNumber,
-                                'guest_surname' => $guestSurname,
-                                'check_in' => date('Y-m-d', $startDate),
-                                'check_out' => date('Y-m-d', $endDate),
-                                'reservation_id' => $reservation['Id'],
-                                'customer_id' => $reservation['CustomerId']
-                            ];
-                        }
-                    }
+                // Validate the surname matches
+                if ($this->matchesSurname($customer, $guestSurname)) {
+                    $startDate = strtotime($reservation['StartUtc']);
+                    $endDate = strtotime($reservation['EndUtc']);
+                    
+                    return [
+                        'valid' => true,
+                        'room_number' => $roomNumber,
+                        'room_id' => $roomId,
+                        'guest_surname' => $guestSurname,
+                        'check_in' => date('Y-m-d', $startDate),
+                        'check_out' => date('Y-m-d', $endDate),
+                        'reservation_id' => $reservation['Id'],
+                        'customer_id' => $accountId
+                    ];
                 }
             }
 
+            error_log("No matching surname found for room $roomNumber (ID: $roomId)");
             return false;
 
         } catch (Exception $e) {
@@ -558,18 +547,18 @@ class MewsConnector
     }
 
     /**
-     * Gets customer details by customer ID
+     * Gets customer details by customer ID using the customers/getAll endpoint
      *
-     * @param string $customerId The customer ID
+     * @param string $customerId The customer ID (AccountId from reservation)
      * @return array|false Customer details or false if not found
      */
-    private function getCustomerDetails($customerLastName)
+    private function getCustomerById($customerId)
     {
         try {
             $endpoint = "/customers/getAll";
             
             $params = [
-                'LastNames' => [$customerLastName],
+                'CustomerIds' => [$customerId],
                 'Extent' => ['Customers' => true]
             ];
 
@@ -582,7 +571,7 @@ class MewsConnector
             return false;
 
         } catch (Exception $e) {
-            error_log("Error getting customer details: " . $e->getMessage());
+            error_log("Error getting customer by ID: " . $e->getMessage());
             return false;
         }
     }
@@ -596,20 +585,36 @@ class MewsConnector
      */
     private function matchesSurname($customer, $surname)
     {
+        $inputSurname = strtolower(trim($surname));
+        
         // Check LastName field
         if (isset($customer['LastName'])) {
-            if (strcasecmp(trim($customer['LastName']), trim($surname)) === 0) {
+            $customerLastName = strtolower(trim($customer['LastName']));
+            
+            // Exact match
+            if ($customerLastName === $inputSurname) {
                 return true;
+            }
+            
+            // Check if input matches any word in a multi-word surname
+            // e.g., "Garcia" matches "Garcia Lopez" or "De La Cruz"
+            $lastNameParts = preg_split('/\s+/', $customerLastName);
+            foreach ($lastNameParts as $part) {
+                if ($part === $inputSurname) {
+                    return true;
+                }
             }
         }
 
-        // Check Name field as fallback
+        // Check Name field as fallback (full name)
         if (isset($customer['Name'])) {
-            $nameParts = explode(' ', trim($customer['Name']));
-            $customerSurname = end($nameParts); // Last part of name
+            $nameParts = preg_split('/\s+/', strtolower(trim($customer['Name'])));
             
-            if (strcasecmp(trim($customerSurname), trim($surname)) === 0) {
-                return true;
+            // Check if input matches any part of the name
+            foreach ($nameParts as $part) {
+                if ($part === $inputSurname) {
+                    return true;
+                }
             }
         }
 
@@ -619,7 +624,7 @@ class MewsConnector
     /**
      * Gets all current reservations for today (for admin interface)
      *
-     * @return array Array of current reservations
+     * @return array Array of current reservations with resource IDs
      */
     public function getCurrentReservations()
     {
@@ -628,47 +633,35 @@ class MewsConnector
             $endOfDay = date('Y-m-d\T23:59:59\Z');
 
             $params = [
-                'TimeFilter' => [
+                'CollidingUtc' => [
                     'StartUtc' => $startOfDay,
                     'EndUtc' => $endOfDay
                 ],
-                'States' => ['Confirmed', 'Started', 'Processed']
+                'States' => ['Confirmed', 'Started']
             ];
 
             $reservations = $this->getReservations($params);
-            $resources = $this->getResources();
-            
-            // Build room mapping
-            $roomMap = [];
-            if (isset($resources['Resources'])) {
-                foreach ($resources['Resources'] as $resource) {
-                    if (isset($resource['Number']) && isset($resource['Id'])) {
-                        $roomMap[$resource['Id']] = $resource['Number'];
-                    }
-                }
-            }
-
             $currentReservations = [];
             
             if (isset($reservations['Reservations'])) {
                 foreach ($reservations['Reservations'] as $reservation) {
-                    if (isset($reservation['AssignedResourceId']) && isset($roomMap[$reservation['AssignedResourceId']])) {
-                        $roomNumber = $roomMap[$reservation['AssignedResourceId']];
-                        
-                        // Get customer details
-                        $customer = null;
-                        if (isset($reservation['CustomerId'])) {
-                            $customer = $this->getCustomerDetails($reservation['CustomerId']);
-                        }
-
-                        $currentReservations[] = [
-                            'room_number' => $roomNumber,
-                            'guest_surname' => $customer['LastName'] ?? $customer['Name'] ?? 'Unknown',
-                            'check_in' => date('Y-m-d', strtotime($reservation['StartUtc'])),
-                            'check_out' => date('Y-m-d', strtotime($reservation['EndUtc'])),
-                            'reservation_id' => $reservation['Id']
-                        ];
+                    $resourceId = $reservation['AssignedResourceId'] ?? null;
+                    if (!$resourceId) continue;
+                    
+                    // Get customer details using AccountId
+                    $customer = null;
+                    $accountId = $reservation['AccountId'] ?? null;
+                    if ($accountId) {
+                        $customer = $this->getCustomerById($accountId);
                     }
+
+                    $currentReservations[] = [
+                        'resource_id' => $resourceId,
+                        'guest_surname' => $customer['LastName'] ?? $customer['Name'] ?? 'Unknown',
+                        'check_in' => date('Y-m-d', strtotime($reservation['StartUtc'])),
+                        'check_out' => date('Y-m-d', strtotime($reservation['EndUtc'])),
+                        'reservation_id' => $reservation['Id']
+                    ];
                 }
             }
 

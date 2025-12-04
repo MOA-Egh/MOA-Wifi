@@ -31,13 +31,14 @@ class MewsWifiAuth {
     /**
      * Validate guest credentials against Mews PMS
      * 
-     * @param string $room_number
-     * @param string $guest_surname
+     * @param string $room_id Mews resource ID from database
+     * @param string $room_number Room number for display
+     * @param string $guest_surname Guest's last name to validate
      * @return array|false Returns reservation data or false if not found
      */
-    public function validateGuest($room_number, $guest_surname) {
+    public function validateGuest($room_id, $room_number, $guest_surname) {
         try {
-            return $this->mews->validateGuestForWifi($room_number, $guest_surname);
+            return $this->mews->validateGuestForWifi($room_id, $room_number, $guest_surname);
         } catch (Exception $e) {
             error_log("Mews WiFi Auth Error: " . $e->getMessage());
             
@@ -92,6 +93,7 @@ class MewsWifiAuth {
             return [
                 'valid' => true,
                 'room_number' => $room_number,
+                'room_id' => 'FALLBACK_ROOM_ID_' . $room_number,
                 'guest_surname' => $guest_surname,
                 'check_in' => date('Y-m-d'),
                 'check_out' => date('Y-m-d', strtotime('+3 days')),

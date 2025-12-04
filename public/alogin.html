@@ -320,47 +320,66 @@
                 }
             }, 1000);
             
-            // Continue browsing / MikroTik login function
+            // Continue browsing - POST to MikroTik via hidden iframe, then redirect
             window.continueBrowsing = function() {
-                if (hasMikroTikLogin) {
-                    // Auto-submit to MikroTik hotspot login
+                if (mtUser && mtPass) {
                     performMikroTikLogin();
-                } else if (window.opener) {
-                    // Close popup window
-                    window.close();
                 } else {
-                    // Fallback: redirect to Google
-                    window.location.href = 'http://www.google.com';
+                    window.location.href = 'https://www.moa.de';
                 }
             };
             
-            // MikroTik hotspot login via form submission
+            // MikroTik login via hidden iframe (HTTP-PAP)
             function performMikroTikLogin() {
-                // Create and submit form to MikroTik
+                // MikroTik hotspot login URL
+                const mikrotikLoginUrl = 'http://10.120.158.1/login';
+                
+                // Create hidden iframe
+                const iframe = document.createElement('iframe');
+                iframe.name = 'mikrotik-login-frame';
+                iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden;';
+                document.body.appendChild(iframe);
+                
+                // Create form targeting the hidden iframe
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = linkLogin || 'http://10.5.50.1/login';
+                form.action = mikrotikLoginUrl;
+                form.target = 'mikrotik-login-frame';
                 
+                // Username
                 const userInput = document.createElement('input');
                 userInput.type = 'hidden';
                 userInput.name = 'username';
                 userInput.value = mtUser;
                 form.appendChild(userInput);
                 
+                // Password
                 const passInput = document.createElement('input');
                 passInput.type = 'hidden';
                 passInput.name = 'password';
                 passInput.value = mtPass;
                 form.appendChild(passInput);
                 
+                // Empty destination (we'll redirect ourselves)
+                const dstInput = document.createElement('input');
+                dstInput.type = 'hidden';
+                dstInput.name = 'dst';
+                dstInput.value = '';
+                form.appendChild(dstInput);
+                
                 document.body.appendChild(form);
                 form.submit();
+                
+                // Wait for login to complete, then redirect
+                setTimeout(() => {
+                    window.location.replace('https://www.moa.de');
+                }, 1500);
             }
             
-            // If popup, auto-close faster
-            if (getUrlParameter('popup') === 'true' && !hasMikroTikLogin) {
+            // If popup mode, also login
+            if (getUrlParameter('popup') === 'true') {
                 setTimeout(() => {
-                    window.close();
+                    continueBrowsing();
                 }, 2000);
             }
         }

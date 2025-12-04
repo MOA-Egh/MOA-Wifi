@@ -35,8 +35,9 @@ if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
  */
 function connectDB($config) {
     try {
+        $dsn = "mysql:host={$config['host']};dbname={$config['database']};charset=utf8";
         $pdo = new PDO(
-            "mysql:host={$config['host']};dbname={$config['database']};charset=utf8",
+            $dsn,
             $config['username'],
             $config['password'],
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
@@ -51,9 +52,23 @@ function connectDB($config) {
 
 /**
  * Validate guest credentials against Mews PMS
+ * Now requires room_id from database lookup
  */
-function validateGuest($mews_auth, $room_number, $surname) {
-    return $mews_auth->validateGuest($room_number, $surname);
+function validateGuest($mews_auth, $room_id, $room_number, $surname) {
+    return $mews_auth->validateGuest($room_id, $room_number, $surname);
+}
+
+/**
+ * Get room id (Mews resource ID) from database by room name/number
+ */
+function getRoomId($pdo, $room_number) {
+    $stmt = $pdo->prepare("
+        SELECT id FROM rooms 
+        WHERE name = ?
+    ");
+    $stmt->execute([$room_number]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? $result['id'] : null;
 }
 
 /**
@@ -111,6 +126,9 @@ function registerDevice($pdo, $mac_address, $room_number, $surname, $speed) {
  * Update room cleaning skip preference
  */
 function updateRoomSkipPreference($pdo, $room_number, $surname, $skip_clean) {
+    // Convert boolean to integer for MySQL (0 or 1)
+    $skip_clean_int = $skip_clean ? 1 : 0;
+    
     $stmt = $pdo->prepare("
         INSERT INTO rooms_to_skip (room_number, guest_surname, skip_clean) 
         VALUES (?, ?, ?) 
@@ -118,7 +136,7 @@ function updateRoomSkipPreference($pdo, $room_number, $surname, $skip_clean) {
         skip_clean = VALUES(skip_clean), 
         updated_at = CURRENT_TIMESTAMP
     ");
-    $stmt->execute([$room_number, $surname, $skip_clean]);
+    $stmt->execute([$room_number, $surname, $skip_clean_int]);
 }
 
 /**
@@ -154,12 +172,25 @@ function redirectToSuccess($linkLogin, $username, $surname, $lang, $speed) {
 }
 
 /**
- * Configure MikroTik hotspot user via API
+ * Configure MikroTik hotspot user via API and authorize MAC address
  */
-function configureMikroTikUser($config, $roomNumber, $surname, $profile) {
+function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAddress = null) {
     // Check if MikroTik integration is enabled
     if (!isset($config['mikrotik']['enabled']) || !$config['mikrotik']['enabled']) {
         return true; // Skip if not enabled
+    }
+    
+    $host = $config['mikrotik']['host'];
+    $port = $config['mikrotik']['port'] ?? 8728;
+    $user = $config['mikrotik']['user'];
+    
+    // Test socket connection before API
+    $socket = @fsockopen($host, $port, $errno, $errstr, 5);
+    if ($socket) {
+        fclose($socket);
+    } else {
+        error_log("MikroTik: Cannot connect to $host:$port - [$errno] $errstr");
+        return false;
     }
     
     // Check if RouterOS API library is available
@@ -177,10 +208,11 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile) {
     
     try {
         $client = new \RouterOS\Client([
-            'host' => $config['mikrotik']['host'],
-            'user' => $config['mikrotik']['user'],
+            'host' => $host,
+            'user' => $user,
             'pass' => $config['mikrotik']['pass'],
-            'port' => $config['mikrotik']['port']
+            'port' => $port,
+            'timeout' => 10
         ]);
         
         // Use Room Number as MikroTik Username
@@ -192,7 +224,7 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile) {
         $existingUser = $client->query($query)->read();
         
         if (empty($existingUser)) {
-            // Create new user
+            // Create new user (no MAC binding - allows multiple devices)
             $addQuery = new \RouterOS\Query('/ip/hotspot/user/add');
             $addQuery->equal('name', $mtUsername);
             $addQuery->equal('password', $surname);
@@ -201,7 +233,7 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile) {
             $client->query($addQuery)->read();
             error_log("MikroTik: Created user $mtUsername with profile $profile");
         } else {
-            // Update existing user
+            // Update existing user profile and password
             $setQuery = new \RouterOS\Query('/ip/hotspot/user/set');
             $setQuery->equal('.id', $existingUser[0]['.id']);
             $setQuery->equal('profile', $profile);
@@ -351,24 +383,34 @@ try {
     try {
         $mac_address = getClientMAC();
         
-        // Validate MAC address format
-        if (!preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/', $mac_address)) {
+        // Normalize MAC to uppercase
+        $mac_address = strtoupper($mac_address);
+        
+        // Validate MAC address format (case-insensitive)
+        if (!preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i', $mac_address)) {
             throw new Exception("Invalid MAC address format: $mac_address");
         }
         
     } catch (Exception $e) {
         error_log("MAC address error: " . $e->getMessage());
-        redirectToError("Unable to register device. .", $lang);
+        redirectToError("Unable to register device.", $lang);
     }
     
     // Connect to database
     $pdo = connectDB($db_config);
     
+    // Look up the Mews room_id from database using room number
+    $room_id = getRoomId($pdo, $username);
+    if (!$room_id) {
+        error_log("Room not found in database: $username");
+        redirectToError("Room not found. Please contact reception.", $lang);
+    }
+    
     // Initialize Mews authentication
     $mews_auth = new MewsWifiAuth($mews_environment);
     
-    // Validate guest credentials against Mews PMS
-    $guest = validateGuest($mews_auth, $username, $surname);
+    // Validate guest credentials against Mews PMS using room_id
+    $guest = validateGuest($mews_auth, $room_id, $username, $surname);
     if (!$guest) {
         redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.", $lang);
     }
@@ -383,8 +425,8 @@ try {
     // Store numeric speed in database (10 Mbps for normal, 20 Mbps for fast)
     $numericSpeed = ($wifi_speed === 'fast') ? 20 : 10;
     
-    // Configure MikroTik hotspot user
-    $mikrotikSuccess = configureMikroTikUser($db_config, $username, $surname, $selectedProfile);
+    // Configure MikroTik hotspot user and authorize MAC address
+    $mikrotikSuccess = configureMikroTikUser($db_config, $username, $surname, $selectedProfile, $mac_address);
     if (!$mikrotikSuccess && ($db_config['mikrotik']['enabled'] ?? false)) {
         // Only fail if MikroTik is enabled but failed
         redirectToError("WiFi system temporarily unavailable. Please try again or contact reception.", $lang);

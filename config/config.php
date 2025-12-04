@@ -16,17 +16,29 @@ return [
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ],
-    
+    // [
+    // // Database settings
+    // 'host' => 'localhost',
+    // 'database' => 'moa-wifi-management',
+    // 'username' => 'mwm',
+    // 'password' => 'bM2KbKiXgFesAXl24RcU',
+    // 'charset' => 'utf8mb4',
+    // 'options' => [
+    //     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    //     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    //     PDO::ATTR_EMULATE_PREPARES => false,
+    // ],
     // MikroTik RouterOS API settings
     'mikrotik' => [
         'enabled' => true,
-        'host' => '192.168.88.1',      // Change to your Router IP
-        'user' => 'api_user',           // Change to your API username
-        'pass' => 'api_password',       // Change to your API password
+        'host' => '193.242.185.58',      // Change to your Router IP
+        //'host' => '192.168.88.1',      // Change to your Router IP
+        'user' => 'egh',           // Change to your API username
+        'pass' => '?7JW3T-2NC-!UGnD',       // Change to your API password
         'port' => 8728,
         'profiles' => [
-            'normal' => 'hm_10M',       // 10 Mbps profile
-            'fast'   => 'hm_20M'        // 20 Mbps profile (Skip Cleaning)
+            'normal' => 'hm-10M',       // 10 Mbps profile
+            'fast'   => 'hm-20M'        // 20 Mbps profile (Skip Cleaning)
         ]
     ]
 ];
