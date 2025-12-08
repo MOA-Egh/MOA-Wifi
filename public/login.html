@@ -326,6 +326,38 @@
             document.documentElement.lang = lang;
         }
         
+        // Get URL parameters (MikroTik passes these when redirecting to external login)
+        function getUrlParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name) || '';
+        }
+        
+        // On page load, populate hidden fields with MikroTik URL parameters
+        document.addEventListener('DOMContentLoaded', function() {
+            // MikroTik passes these in the redirect URL
+            const macFromUrl = getUrlParam('mac');
+            const ipFromUrl = getUrlParam('ip');
+            const linkLoginFromUrl = getUrlParam('link-login-only') || getUrlParam('link-login');
+            const dstFromUrl = getUrlParam('link-orig') || getUrlParam('dst');
+            
+            // Update hidden fields with real values from URL (if available)
+            if (macFromUrl && macFromUrl !== '$(mac)') {
+                document.querySelector('input[name="client_mac"]').value = macFromUrl;
+            }
+            if (ipFromUrl && ipFromUrl !== '$(ip)') {
+                document.querySelector('input[name="client_ip"]').value = ipFromUrl;
+            }
+            if (linkLoginFromUrl) {
+                document.querySelector('input[name="link_login"]').value = linkLoginFromUrl;
+            }
+            if (dstFromUrl) {
+                document.querySelector('input[name="dst"]').value = dstFromUrl;
+            }
+            
+            // Debug: log what we received
+            console.log('MikroTik params from URL:', { mac: macFromUrl, ip: ipFromUrl, linkLogin: linkLoginFromUrl, dst: dstFromUrl });
+        });
+        
         // Form submission handling
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             const wifiSpeed = document.querySelector('input[name="wifi_speed"]:checked').value;

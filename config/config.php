@@ -16,6 +16,11 @@ return [
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ],
+    
+    // Maximum devices allowed per guest (room + surname combination)
+    // This is a hard limit - guest cannot register more devices even if old ones disconnect
+    'max_devices_per_guest' => 3,
+    
     // [
     // // Database settings
     // 'host' => 'localhost',

@@ -300,8 +300,8 @@
                 document.getElementById('fast-wifi-notice').style.display = 'block';
             }
             
-            // Countdown timer (3 seconds before auto-login)
-            let countdown = 3;
+            // Countdown timer (10 seconds before auto-login)
+            let countdown = 10;
             
             // Update redirect info text
             function updateRedirectText() {
@@ -320,63 +320,67 @@
                 }
             }, 1000);
             
-            // Continue browsing - POST to MikroTik via hidden iframe, then redirect
+            // Continue browsing - perform MikroTik login to activate session with profile
             window.continueBrowsing = function() {
-                if (mtUser && mtPass) {
+                if (linkLogin && mtUser && mtPass) {
+                    // Login via MikroTik hotspot to activate session with profile/rate limits
                     performMikroTikLogin();
                 } else {
-                    window.location.href = 'https://www.moa.de';
+                    // No credentials available - just redirect
+                    window.location.replace('https://www.moa.de');
                 }
             };
             
-            // MikroTik login via hidden iframe (HTTP-PAP)
+            // MikroTik login via hidden iframe
+            // This creates an active session with the correct profile (rate limits applied)
             function performMikroTikLogin() {
-                // MikroTik hotspot login URL
-                const mikrotikLoginUrl = 'http://10.120.158.1/login';
+                // Use the link-login URL from MikroTik
+                let mikrotikLoginUrl = linkLogin;
                 
-                // Create hidden iframe
+                // If linkLogin is empty or contains template variable, use direct router URL
+                if (!mikrotikLoginUrl || mikrotikLoginUrl.includes('$(') || mikrotikLoginUrl === '') {
+                    mikrotikLoginUrl = 'http://10.120.158.1/login';
+                }
+                
+                console.log('MikroTik login:', mikrotikLoginUrl, 'User:', mtUser);
+                
+                // Create hidden iframe for the login
                 const iframe = document.createElement('iframe');
                 iframe.name = 'mikrotik-login-frame';
                 iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden;';
                 document.body.appendChild(iframe);
                 
-                // Create form targeting the hidden iframe
+                // Create and submit form to MikroTik
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = mikrotikLoginUrl;
                 form.target = 'mikrotik-login-frame';
                 
-                // Username
-                const userInput = document.createElement('input');
-                userInput.type = 'hidden';
-                userInput.name = 'username';
-                userInput.value = mtUser;
-                form.appendChild(userInput);
+                // Add form fields
+                const fields = {
+                    'username': mtUser,
+                    'password': mtPass,
+                    'dst': 'https://www.moa.de'
+                };
                 
-                // Password
-                const passInput = document.createElement('input');
-                passInput.type = 'hidden';
-                passInput.name = 'password';
-                passInput.value = mtPass;
-                form.appendChild(passInput);
-                
-                // Empty destination (we'll redirect ourselves)
-                const dstInput = document.createElement('input');
-                dstInput.type = 'hidden';
-                dstInput.name = 'dst';
-                dstInput.value = '';
-                form.appendChild(dstInput);
+                for (const [name, value] of Object.entries(fields)) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = value;
+                    form.appendChild(input);
+                }
                 
                 document.body.appendChild(form);
                 form.submit();
                 
-                // Wait for login to complete, then redirect
+                // Redirect after login completes
                 setTimeout(() => {
                     window.location.replace('https://www.moa.de');
-                }, 1500);
+                }, 2000);
             }
             
-            // If popup mode, also login
+            // If popup mode, redirect after a short delay
             if (getUrlParameter('popup') === 'true') {
                 setTimeout(() => {
                     continueBrowsing();

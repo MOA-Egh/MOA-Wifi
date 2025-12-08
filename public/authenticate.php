@@ -4,6 +4,44 @@
  * Handles guest authentication and device management
  */
 
+// ============================================================================
+// DEBUG LOGGING
+// ============================================================================
+function debugLog($message, $data = null) {
+    $logFile = __DIR__ . '/../logs/auth_debug.log';
+    $logDir = dirname($logFile);
+    
+    if (!is_dir($logDir)) {
+        mkdir($logDir, 0755, true);
+    }
+    
+    $timestamp = date('Y-m-d H:i:s');
+    $logEntry = "[$timestamp] $message";
+    
+    if ($data !== null) {
+        if (is_array($data) || is_object($data)) {
+            $logEntry .= "\n" . print_r($data, true);
+        } else {
+            $logEntry .= " | $data";
+        }
+    }
+    
+    $logEntry .= "\n" . str_repeat('-', 80) . "\n";
+    file_put_contents($logFile, $logEntry, FILE_APPEND);
+}
+
+// Log all incoming data at the start
+debugLog("=== NEW REQUEST ===");
+debugLog("POST data", $_POST);
+debugLog("GET data", $_GET);
+debugLog("SERVER variables (relevant)", [
+    'REMOTE_ADDR' => $_SERVER['REMOTE_ADDR'] ?? 'not set',
+    'HTTP_X_FORWARDED_FOR' => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? 'not set',
+    'HTTP_X_MAC_ADDRESS' => $_SERVER['HTTP_X_MAC_ADDRESS'] ?? 'not set',
+    'HTTP_X_REAL_IP' => $_SERVER['HTTP_X_REAL_IP'] ?? 'not set',
+]);
+// ============================================================================
+
 // Include required files
 require_once __DIR__ . '/../src/MewsWifiAuth.php';
 
@@ -72,51 +110,58 @@ function getRoomId($pdo, $room_number) {
 }
 
 /**
- * Get devices count by speed for a room
+ * Get devices count for a room and guest
+ * Counts only devices registered to this specific guest (by surname)
  */
-function getDeviceCountBySpeed($pdo, $room_number, $speed) {
+function getDeviceCountForGuest($pdo, $room_number, $surname) {
     $stmt = $pdo->prepare("
         SELECT COUNT(*) as count 
         FROM authorized_devices 
-        WHERE room_number = ? AND speed = ?
+        WHERE room_number = ? AND surname = ?
     ");
-    $stmt->execute([$room_number, $speed]);
+    $stmt->execute([$room_number, $surname]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return $result['count'];
 }
 
 /**
- * Check if device is already registered
+ * Check if device is already registered for this guest
+ * Uses room_number + surname + device_mac as the unique identifier
  */
-function isDeviceRegistered($pdo, $mac_address) {
+function isDeviceRegisteredForGuest($pdo, $mac_address, $room_number, $surname) {
     $stmt = $pdo->prepare("
         SELECT * FROM authorized_devices 
-        WHERE device_mac = ?
+        WHERE device_mac = ? AND room_number = ? AND surname = ?
     ");
-    $stmt->execute([$mac_address]);
+    $stmt->execute([$mac_address, $room_number, $surname]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 /**
- * Register or update device
+ * Register or update device for a specific guest
+ * Uses composite key (room_number, surname, device_mac) for guest isolation
  */
 function registerDevice($pdo, $mac_address, $room_number, $surname, $speed) {
-    // Check if device already exists
-    $existing = isDeviceRegistered($pdo, $mac_address);
+    // Check if this device is already registered for THIS guest
+    $existing = isDeviceRegisteredForGuest($pdo, $mac_address, $room_number, $surname);
     
     if ($existing) {
-        // Update existing device
+        // Update existing device for this guest
         $stmt = $pdo->prepare("
             UPDATE authorized_devices 
-            SET room_number = ?, surname = ?, speed = ?, last_update = CURRENT_TIMESTAMP 
-            WHERE device_mac = ?
+            SET speed = ?, last_update = CURRENT_TIMESTAMP 
+            WHERE device_mac = ? AND room_number = ? AND surname = ?
         ");
-        $stmt->execute([$room_number, $surname, $speed, $mac_address]);
+        $stmt->execute([$speed, $mac_address, $room_number, $surname]);
     } else {
-        // Insert new device
+        // Insert new device for this guest
+        // Uses ON DUPLICATE KEY to handle the composite unique constraint
         $stmt = $pdo->prepare("
             INSERT INTO authorized_devices (device_mac, room_number, surname, speed) 
             VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+            speed = VALUES(speed), 
+            last_update = CURRENT_TIMESTAMP
         ");
         $stmt->execute([$mac_address, $room_number, $surname, $speed]);
     }
@@ -124,19 +169,24 @@ function registerDevice($pdo, $mac_address, $room_number, $surname, $speed) {
 
 /**
  * Update room cleaning skip preference
+ * Only sets skip_clean to 1 when fast WiFi is selected - never resets to 0
+ * This ensures cleaning is skipped even if only one device chose fast WiFi
  */
 function updateRoomSkipPreference($pdo, $room_number, $surname, $skip_clean) {
-    // Convert boolean to integer for MySQL (0 or 1)
-    $skip_clean_int = $skip_clean ? 1 : 0;
+    // Only update if guest selected fast WiFi (skip_clean = true)
+    // Never reset to 0 - once a guest opts out of cleaning, it stays
+    if (!$skip_clean) {
+        return; // Do nothing if normal WiFi selected
+    }
     
     $stmt = $pdo->prepare("
         INSERT INTO rooms_to_skip (room_number, guest_surname, skip_clean) 
-        VALUES (?, ?, ?) 
+        VALUES (?, ?, 1) 
         ON DUPLICATE KEY UPDATE 
-        skip_clean = VALUES(skip_clean), 
+        skip_clean = 1, 
         updated_at = CURRENT_TIMESTAMP
     ");
-    $stmt->execute([$room_number, $surname, $skip_clean_int]);
+    $stmt->execute([$room_number, $surname]);
 }
 
 /**
@@ -172,11 +222,22 @@ function redirectToSuccess($linkLogin, $username, $surname, $lang, $speed) {
 }
 
 /**
- * Configure MikroTik hotspot user via API and authorize MAC address
+ * Configure MikroTik hotspot user via API and authorize the client
+ * Creates user AND activates session directly via IP binding (no browser login needed)
  */
-function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAddress = null) {
+function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAddress = null, $clientIP = null) {
+    debugLog("=== MIKROTIK CONFIGURATION ===");
+    debugLog("Parameters", [
+        'roomNumber' => $roomNumber,
+        'surname' => $surname,
+        'profile' => $profile,
+        'macAddress' => $macAddress,
+        'clientIP' => $clientIP
+    ]);
+    
     // Check if MikroTik integration is enabled
     if (!isset($config['mikrotik']['enabled']) || !$config['mikrotik']['enabled']) {
+        debugLog("MikroTik integration DISABLED, skipping");
         return true; // Skip if not enabled
     }
     
@@ -184,17 +245,27 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
     $port = $config['mikrotik']['port'] ?? 8728;
     $user = $config['mikrotik']['user'];
     
+    debugLog("MikroTik connection", [
+        'host' => $host,
+        'port' => $port,
+        'user' => $user
+    ]);
+    
     // Test socket connection before API
+    debugLog("Testing TCP connection to $host:$port...");
     $socket = @fsockopen($host, $port, $errno, $errstr, 5);
     if ($socket) {
+        debugLog("✓ TCP connection successful");
         fclose($socket);
     } else {
+        debugLog("✗ TCP connection FAILED: [$errno] $errstr");
         error_log("MikroTik: Cannot connect to $host:$port - [$errno] $errstr");
         return false;
     }
     
     // Check if RouterOS API library is available
     if (!file_exists(__DIR__ . '/../vendor/autoload.php')) {
+        debugLog("ERROR: vendor/autoload.php not found");
         error_log("MikroTik API: vendor/autoload.php not found. Run 'composer require evilfreelancer/routeros-api-php'");
         return false;
     }
@@ -202,11 +273,13 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
     require_once __DIR__ . '/../vendor/autoload.php';
     
     if (!class_exists('RouterOS\Client')) {
+        debugLog("ERROR: RouterOS\\Client class not found");
         error_log("MikroTik API: RouterOS\Client class not found. Run 'composer require evilfreelancer/routeros-api-php'");
         return false;
     }
     
     try {
+        debugLog("Creating RouterOS API client...");
         $client = new \RouterOS\Client([
             'host' => $host,
             'user' => $user,
@@ -214,117 +287,266 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
             'port' => $port,
             'timeout' => 10
         ]);
+        debugLog("✓ RouterOS API connected successfully");
         
         // Use Room Number as MikroTik Username
         $mtUsername = 'room' . $roomNumber;
+        debugLog("MikroTik username: $mtUsername");
         
         // Check if user already exists
+        debugLog("Checking if user exists...");
         $query = new \RouterOS\Query('/ip/hotspot/user/print');
         $query->where('name', $mtUsername);
         $existingUser = $client->query($query)->read();
+        debugLog("User query result", $existingUser);
         
         if (empty($existingUser)) {
             // Create new user (no MAC binding - allows multiple devices)
+            debugLog("Creating NEW hotspot user...");
             $addQuery = new \RouterOS\Query('/ip/hotspot/user/add');
             $addQuery->equal('name', $mtUsername);
             $addQuery->equal('password', $surname);
             $addQuery->equal('profile', $profile);
             $addQuery->equal('comment', 'Created via WiFi Portal - ' . date('Y-m-d H:i:s'));
-            $client->query($addQuery)->read();
+            $result = $client->query($addQuery)->read();
+            debugLog("User creation result", $result);
             error_log("MikroTik: Created user $mtUsername with profile $profile");
         } else {
             // Update existing user profile and password
+            debugLog("Updating EXISTING hotspot user (ID: " . $existingUser[0]['.id'] . ")");
             $setQuery = new \RouterOS\Query('/ip/hotspot/user/set');
             $setQuery->equal('.id', $existingUser[0]['.id']);
             $setQuery->equal('profile', $profile);
             $setQuery->equal('password', $surname);
-            $client->query($setQuery)->read();
+            $result = $client->query($setQuery)->read();
+            debugLog("User update result", $result);
             error_log("MikroTik: Updated user $mtUsername to profile $profile");
         }
         
+        // =========================================================
+        // AUTHORIZE DEVICE - Create active session WITH profile
+        // =========================================================
+        // We need to create an active hotspot session so the profile 
+        // (rate limits) are applied. NO bypassed IP binding!
+        debugLog("=== AUTHORIZE DEVICE WITH PROFILE ===");
+        debugLog("ClientIP: $clientIP, MAC: $macAddress, Profile: $profile");
+        
+        if ($clientIP && $macAddress) {
+            // Step 1: Remove any existing bypassed IP bindings for this MAC
+            // (cleanup from previous code versions)
+            try {
+                $bindQuery = new \RouterOS\Query('/ip/hotspot/ip-binding/print');
+                $bindQuery->where('mac-address', $macAddress);
+                $existingBinding = $client->query($bindQuery)->read();
+                
+                if (!empty($existingBinding)) {
+                    debugLog("Removing old IP binding for MAC: $macAddress");
+                    $removeQuery = new \RouterOS\Query('/ip/hotspot/ip-binding/remove');
+                    $removeQuery->equal('.id', $existingBinding[0]['.id']);
+                    $client->query($removeQuery)->read();
+                    debugLog("Old binding removed");
+                }
+            } catch (Exception $e) {
+                debugLog("Note: Could not check/remove old bindings: " . $e->getMessage());
+            }
+            
+            // Step 2: Remove any existing active session for this MAC
+            // (to ensure fresh session with correct profile)
+            try {
+                $activeQuery = new \RouterOS\Query('/ip/hotspot/active/print');
+                $activeQuery->where('mac-address', $macAddress);
+                $existingActive = $client->query($activeQuery)->read();
+                debugLog("Existing active sessions for MAC", $existingActive);
+                
+                if (!empty($existingActive)) {
+                    debugLog("Removing existing active session to apply new profile...");
+                    $removeActiveQuery = new \RouterOS\Query('/ip/hotspot/active/remove');
+                    $removeActiveQuery->equal('.id', $existingActive[0]['.id']);
+                    $client->query($removeActiveQuery)->read();
+                    debugLog("Existing session removed");
+                }
+            } catch (Exception $e) {
+                debugLog("Note: Could not check/remove active sessions: " . $e->getMessage());
+            }
+            
+            // Step 3: Create active session using MikroTik's login mechanism
+            // Method A: Try /ip/hotspot/active/login (RouterOS 6.45+)
+            $sessionCreated = false;
+            
+            try {
+                debugLog("Attempting /ip/hotspot/active/login...");
+                $loginQuery = new \RouterOS\Query('/ip/hotspot/active/login');
+                $loginQuery->equal('user', $mtUsername);
+                $loginQuery->equal('password', $surname);
+                $loginQuery->equal('ip', $clientIP);
+                $loginQuery->equal('mac-address', $macAddress);
+                $loginResult = $client->query($loginQuery)->read();
+                debugLog("Login result", $loginResult);
+                $sessionCreated = true;
+                debugLog("✓ Active session created with profile: $profile");
+                error_log("MikroTik: Session created for $mtUsername ($macAddress) with profile $profile");
+                
+            } catch (Exception $loginEx) {
+                debugLog("Method A failed: " . $loginEx->getMessage());
+                
+                // Method B: Use /ip/hotspot/host to make MikroTik recognize the device,
+                // then the device's next request will trigger auto-login
+                try {
+                    debugLog("Trying Method B: Add host entry for auto-login...");
+                    
+                    // Check if host exists
+                    $hostQuery = new \RouterOS\Query('/ip/hotspot/host/print');
+                    $hostQuery->where('mac-address', $macAddress);
+                    $existingHost = $client->query($hostQuery)->read();
+                    debugLog("Existing host entries", $existingHost);
+                    
+                    // The host entry is created automatically by MikroTik when device connects
+                    // We can't create it manually, but we can check if it exists
+                    
+                    if (!empty($existingHost)) {
+                        // Device is known to MikroTik - try to authorize it
+                        debugLog("Host found - device is connected to hotspot");
+                        
+                        // Method C: Use cookie-based auto-login
+                        // Add the MAC to the user for auto-recognition
+                        debugLog("Binding MAC to user for auto-login on reconnect...");
+                        $setQuery = new \RouterOS\Query('/ip/hotspot/user/set');
+                        $setQuery->equal('name', $mtUsername);
+                        $setQuery->equal('mac-address', $macAddress);
+                        $client->query($setQuery)->read();
+                        debugLog("MAC bound to user - will auto-login on next connection");
+                        $sessionCreated = true;
+                    } else {
+                        debugLog("Host not found - device may not be connected via hotspot interface");
+                    }
+                    
+                } catch (Exception $hostEx) {
+                    debugLog("Method B also failed: " . $hostEx->getMessage());
+                }
+            }
+            
+            if (!$sessionCreated) {
+                debugLog("⚠ Could not create active session automatically");
+                debugLog("Guest will see MikroTik login page - credentials are ready: $mtUsername / $surname");
+            }
+            
+        } else {
+            debugLog("⚠ Cannot authorize device - missing client IP or MAC");
+            debugLog("Client IP: " . ($clientIP ?: "MISSING"));
+            debugLog("MAC: " . ($macAddress ?: "MISSING"));
+        }
+        
+        debugLog("=== MIKROTIK CONFIGURATION COMPLETE ===");
         return true;
         
     } catch (Exception $e) {
+        debugLog("EXCEPTION: " . $e->getMessage());
+        debugLog("Stack trace", $e->getTraceAsString());
         error_log("MikroTik API Error: " . $e->getMessage());
         return false;
     }
 }
 
 /**
- * Get client MAC address (RouterOS specific)
- * RouterOS provides the MAC address through server variables when hotspot is configured properly
+ * Get client MAC address from MikroTik
+ * When using external login page, MikroTik passes MAC via URL params to login page,
+ * which then forwards it via POST. Values like $(mac) mean it wasn't substituted.
  */
 function getClientMAC() {
-    // Method 0: RouterOS template variables (most reliable)
-    // RouterOS passes MAC via $(mac) template variable in form
-    if (isset($_POST['client_mac']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_POST['client_mac'])) {
-        return strtoupper(str_replace('-', ':', $_POST['client_mac']));
-    }
+    debugLog("=== GET CLIENT MAC ===");
     
-    // RouterOS hotspot provides MAC address in different ways depending on configuration
-    
-    // Method 1: Direct server variable (most common in RouterOS hotspot)
-    if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        return strtoupper(str_replace('-', ':', $_SERVER['HTTP_X_FORWARDED_FOR']));
-    }
-    
-    // Method 2: RouterOS may pass MAC in custom header
-    if (isset($_SERVER['HTTP_X_MAC_ADDRESS'])) {
-        return strtoupper(str_replace('-', ':', $_SERVER['HTTP_X_MAC_ADDRESS']));
-    }
-    
-    // Method 3: Check if RouterOS passes MAC in REMOTE_USER (some configurations)
-    if (isset($_SERVER['REMOTE_USER']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_SERVER['REMOTE_USER'])) {
-        return strtoupper(str_replace('-', ':', $_SERVER['REMOTE_USER']));
-    }
-    
-    // Method 4: RouterOS may pass MAC in query parameters or form data
-    if (isset($_GET['mac']) && preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $_GET['mac'])) {
-        return strtoupper(str_replace('-', ':', $_GET['mac']));
-    }
-    
-    // Method 5: Check if RouterOS hotspot passes client IP and we can resolve MAC via ARP
-    // Note: This requires RouterOS to be configured to pass client info
-    $client_ip = getClientIP();
-    if ($client_ip) {
-        $mac = getMACFromIP($client_ip);
-        if ($mac) {
-            return $mac;
+    // Method 1: From POST (login form with URL param values)
+    if (isset($_POST['client_mac'])) {
+        $mac = $_POST['client_mac'];
+        debugLog("POST client_mac raw value: $mac");
+        
+        // Check if it's a real MAC (not a template variable like $(mac))
+        if (preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $mac)) {
+            debugLog("✓ Valid MAC from POST: $mac");
+            return strtoupper(str_replace('-', ':', $mac));
+        } else {
+            debugLog("✗ POST client_mac is not a valid MAC (template not substituted): $mac");
         }
     }
     
-    // Development/Testing fallback: Generate consistent MAC based on IP and User Agent
-    // This ensures same device gets same MAC during testing
-    if (isDevelopmentMode()) {
-        return generateTestMAC();
+    // Method 2: From GET params (direct MikroTik redirect)
+    if (isset($_GET['mac'])) {
+        $mac = $_GET['mac'];
+        debugLog("GET mac raw value: $mac");
+        
+        if (preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $mac)) {
+            debugLog("✓ Valid MAC from GET: $mac");
+            return strtoupper(str_replace('-', ':', $mac));
+        }
     }
     
-    // If we can't get MAC address, this is a configuration issue
-    error_log("WARNING: Cannot determine client MAC address. Check RouterOS hotspot configuration.");
-    throw new Exception("Unable to determine device MAC address. Please contact technical support.");
+    // Method 3: HTTP headers (if MikroTik configured to pass via proxy)
+    if (isset($_SERVER['HTTP_X_MAC_ADDRESS'])) {
+        $mac = $_SERVER['HTTP_X_MAC_ADDRESS'];
+        if (preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $mac)) {
+            debugLog("✓ Valid MAC from HTTP header: $mac");
+            return strtoupper(str_replace('-', ':', $mac));
+        }
+    }
+    
+    // No valid MAC found - return null (will be handled by caller)
+    debugLog("✗ No valid MAC address found from any source");
+    return null;
 }
 
 /**
- * Get client IP address
+ * Get client IP address from MikroTik
+ * When using external login page, MikroTik passes IP via URL params to login page.
  */
 function getClientIP() {
-    // RouterOS typically provides the real client IP
-    $ip_sources = [
-        $_SERVER['HTTP_X_REAL_IP'] ?? null,
-        $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null,
-        $_SERVER['REMOTE_ADDR'] ?? null
-    ];
+    debugLog("=== GET CLIENT IP ===");
     
-    foreach ($ip_sources as $ip) {
-        if ($ip && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+    // Method 1: From POST (login form with URL param values)
+    if (isset($_POST['client_ip'])) {
+        $ip = $_POST['client_ip'];
+        debugLog("POST client_ip raw value: $ip");
+        
+        // Check if it's a real IP (not a template variable like $(ip))
+        if (filter_var($ip, FILTER_VALIDATE_IP)) {
+            debugLog("✓ Valid IP from POST: $ip");
             return $ip;
-        }
-        if ($ip && filter_var($ip, FILTER_VALIDATE_IP)) {
-            return $ip; // Accept private IPs for hotel network
+        } else {
+            debugLog("✗ POST client_ip is not a valid IP (template not substituted): $ip");
         }
     }
     
-    return $_SERVER['REMOTE_ADDR'] ?? null;
+    // Method 2: From GET params (direct MikroTik redirect)
+    if (isset($_GET['ip'])) {
+        $ip = $_GET['ip'];
+        debugLog("GET ip raw value: $ip");
+        
+        if (filter_var($ip, FILTER_VALIDATE_IP)) {
+            debugLog("✓ Valid IP from GET: $ip");
+            return $ip;
+        }
+    }
+    
+    // Method 3: HTTP headers
+    $headers = ['HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_CLIENT_IP'];
+    foreach ($headers as $header) {
+        if (isset($_SERVER[$header])) {
+            $ip = $_SERVER[$header];
+            // Handle comma-separated list (X-Forwarded-For can have multiple)
+            if (strpos($ip, ',') !== false) {
+                $ip = trim(explode(',', $ip)[0]);
+            }
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                debugLog("✓ Valid IP from $header: $ip");
+                return $ip;
+            }
+        }
+    }
+    
+    // Fallback to REMOTE_ADDR (but this is likely the web server IP for external login)
+    $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+    debugLog("Fallback REMOTE_ADDR: $ip (likely web server IP, not client)");
+    
+    return null; // Return null to indicate we don't have the real client IP
 }
 
 /**
@@ -379,21 +601,29 @@ try {
         redirectToError("Room number and surname are required", $lang);
     }
     
-    // Get actual MAC address
-    try {
-        $mac_address = getClientMAC();
-        
+    // Get actual MAC address (may be null if MikroTik didn't pass it)
+    $mac_address = getClientMAC();
+    $clientIP = getClientIP();
+    
+    debugLog("=== CLIENT INFO ===");
+    debugLog("MAC from MikroTik: " . ($mac_address ?? "NOT AVAILABLE"));
+    debugLog("IP from MikroTik: " . ($clientIP ?? "NOT AVAILABLE"));
+    
+    // If no valid MAC, we can still proceed but won't track device or create IP binding
+    // The guest will need to login via MikroTik hotspot with the created credentials
+    $hasValidMAC = false;
+    if ($mac_address) {
         // Normalize MAC to uppercase
         $mac_address = strtoupper($mac_address);
         
-        // Validate MAC address format (case-insensitive)
-        if (!preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i', $mac_address)) {
-            throw new Exception("Invalid MAC address format: $mac_address");
+        // Validate MAC address format
+        if (preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i', $mac_address)) {
+            $hasValidMAC = true;
+            debugLog("✓ Valid MAC address: $mac_address");
+        } else {
+            debugLog("✗ Invalid MAC format, ignoring: $mac_address");
+            $mac_address = null;
         }
-        
-    } catch (Exception $e) {
-        error_log("MAC address error: " . $e->getMessage());
-        redirectToError("Unable to register device.", $lang);
     }
     
     // Connect to database
@@ -415,6 +645,21 @@ try {
         redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.", $lang);
     }
     
+    // Check device limit only if we have a valid MAC (otherwise we can't track)
+    $maxDevices = $db_config['max_devices_per_guest'] ?? 3;
+    if ($hasValidMAC) {
+        $existingDevice = isDeviceRegisteredForGuest($pdo, $mac_address, $username, $surname);
+        if (!$existingDevice) {
+            $deviceCount = getDeviceCountForGuest($pdo, $username, $surname);
+            if ($deviceCount >= $maxDevices) {
+                error_log("Device limit reached - Room: $username, Guest: $surname, Count: $deviceCount");
+                redirectToError("Maximum number of devices ($maxDevices) reached for this room. Please disconnect a device or contact reception.", $lang);
+            }
+        }
+    } else {
+        debugLog("Skipping device limit check - no valid MAC available");
+    }
+    
     // Map speed selection to MikroTik profile and numeric speed for database
     $profileMap = $db_config['mikrotik']['profiles'] ?? [
         'normal' => 'hm_10M',
@@ -425,30 +670,54 @@ try {
     // Store numeric speed in database (10 Mbps for normal, 20 Mbps for fast)
     $numericSpeed = ($wifi_speed === 'fast') ? 20 : 10;
     
-    // Configure MikroTik hotspot user and authorize MAC address
-    $mikrotikSuccess = configureMikroTikUser($db_config, $username, $surname, $selectedProfile, $mac_address);
+    debugLog("=== AUTHENTICATION SUMMARY ===");
+    debugLog("Room: $username, Surname: $surname");
+    debugLog("MAC Address: " . ($mac_address ?? "NOT AVAILABLE"));
+    debugLog("Client IP: " . ($clientIP ?? "NOT AVAILABLE"));
+    debugLog("Speed: $wifi_speed -> Profile: $selectedProfile ($numericSpeed Mbps)");
+    
+    // Configure MikroTik hotspot user (and session if MAC/IP available)
+    $mikrotikSuccess = configureMikroTikUser($db_config, $username, $surname, $selectedProfile, $mac_address, $clientIP);
+    debugLog("MikroTik configuration result: " . ($mikrotikSuccess ? "SUCCESS" : "FAILED"));
+    
     if (!$mikrotikSuccess && ($db_config['mikrotik']['enabled'] ?? false)) {
+        debugLog("ERROR: MikroTik failed and is enabled - aborting");
         // Only fail if MikroTik is enabled but failed
         redirectToError("WiFi system temporarily unavailable. Please try again or contact reception.", $lang);
     }
     
-    // Register the device in database for admin tracking
-    registerDevice($pdo, $mac_address, $username, $surname, $numericSpeed);
+    // Register the device in database for admin tracking (only if valid MAC)
+    if ($hasValidMAC) {
+        registerDevice($pdo, $mac_address, $username, $surname, $numericSpeed);
+        debugLog("Device registered in database");
+    } else {
+        debugLog("Skipping device registration - no valid MAC available");
+    }
     
     // Update room cleaning preference based on speed selection
     if ($wifi_speed === 'fast') {
         updateRoomSkipPreference($pdo, $username, $surname, true);
+        debugLog("Room skip preference set to TRUE (fast WiFi selected)");
     } else {
         updateRoomSkipPreference($pdo, $username, $surname, false);
     }
     
     // Log the successful authentication
-    error_log("WiFi access granted - Room: $username, Device: $mac_address, Speed: {$numericSpeed} Mbps, Profile: $selectedProfile");
+    debugLog("=== AUTHENTICATION COMPLETE - SUCCESS ===");
+    if ($hasValidMAC) {
+        debugLog("✓ MikroTik user created, session may have been activated via API");
+    } else {
+        debugLog("⚠ MikroTik user created but NO session activated (missing MAC/IP)");
+        debugLog("Guest will need to login via MikroTik hotspot with credentials: room$username / $surname");
+    }
+    error_log("WiFi access granted - Room: $username, Device: " . ($mac_address ?? "unknown") . ", IP: " . ($clientIP ?? "unknown") . ", Speed: {$numericSpeed} Mbps, Profile: $selectedProfile");
     
-    // Redirect to success page (which will auto-login to MikroTik)
+    // Redirect to success page
+    // If we couldn't create a session via API, the success page will try browser-based login
     redirectToSuccess($linkLogin, $username, $surname, $lang, $numericSpeed);
     
 } catch (Exception $e) {
+    debugLog("EXCEPTION: " . $e->getMessage());
     error_log("Authentication error: " . $e->getMessage());
     redirectToError("An error occurred during authentication. Please try again.", $lang);
 }
