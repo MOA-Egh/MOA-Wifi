@@ -128,6 +128,84 @@
             margin-top: 15px;
         }
         
+        /* Mobile Responsive Styles */
+        @media screen and (max-width: 480px) {
+            body {
+                padding: 10px;
+                align-items: flex-start;
+                padding-top: 20px;
+            }
+            
+            .success-container {
+                padding: 25px 20px;
+                width: 100%;
+                border-radius: 8px;
+            }
+            
+            .success-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 28px;
+                margin-bottom: 15px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            .success-message {
+                font-size: 13px;
+                margin-bottom: 15px;
+            }
+            
+            .connection-info {
+                padding: 15px;
+                margin: 15px 0;
+            }
+            
+            .info-row {
+                flex-direction: column;
+                gap: 3px;
+            }
+            
+            .info-label,
+            .info-value {
+                font-size: 12px;
+            }
+            
+            .continue-btn {
+                padding: 14px 25px;
+                font-size: 13px;
+                width: 100%;
+            }
+            
+            .redirect-info {
+                font-size: 11px;
+            }
+            
+            .lang-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
+        
+        /* Very small screens */
+        @media screen and (max-width: 360px) {
+            .success-container {
+                padding: 20px 15px;
+            }
+            
+            h1 {
+                font-size: 18px;
+            }
+            
+            .success-icon {
+                width: 50px;
+                height: 50px;
+                font-size: 24px;
+            }
+        }
+        
         .popup-notice {
             background: #e8f5e9;
             border: 1px solid #c8e6c9;
@@ -217,7 +295,7 @@
                 deviceRegistered: 'Registered',
                 fastNotice: 'Fast WiFi activated! Room cleaning has been skipped for your stay.',
                 continueBtn: 'Continue Browsing',
-                redirectInfo: 'Connecting to WiFi in {seconds} seconds...',
+                redirectInfo: 'Redirecting in {seconds} seconds...',
                 accessDeniedTitle: 'Access Denied',
                 accessDeniedMessage: 'This page can only be accessed after successful login.',
                 backToLogin: 'Back to Login'
@@ -300,8 +378,8 @@
                 document.getElementById('fast-wifi-notice').style.display = 'block';
             }
             
-            // Countdown timer (10 seconds before auto-login)
-            let countdown = 10;
+            // Countdown timer (5 seconds before auto-login)
+            let countdown = 5;
             
             // Update redirect info text
             function updateRedirectText() {

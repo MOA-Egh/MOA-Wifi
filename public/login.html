@@ -198,6 +198,115 @@
         .hidden {
             display: none;
         }
+        
+        /* Mobile Responsive Styles */
+        @media screen and (max-width: 480px) {
+            body {
+                padding: 10px;
+                align-items: flex-start;
+                padding-top: 20px;
+            }
+            
+            .container {
+                padding: 25px 20px;
+                width: 100%;
+                border-radius: 8px;
+            }
+            
+            .logo img {
+                max-width: 120px;
+            }
+            
+            .logo h1 {
+                font-size: 18px;
+            }
+            
+            .language-toggle {
+                margin-bottom: 20px;
+            }
+            
+            .lang-btn {
+                padding: 10px 12px;
+                margin: 0 3px;
+                font-size: 13px;
+            }
+            
+            .form-group {
+                margin-bottom: 15px;
+            }
+            
+            label {
+                font-size: 13px;
+            }
+            
+            input[type="text"] {
+                padding: 12px;
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+            
+            .wifi-option {
+                padding: 14px;
+                margin: 10px 0;
+            }
+            
+            .wifi-option label {
+                font-size: 14px;
+            }
+            
+            .speed-info {
+                font-size: 11px;
+            }
+            
+            .clean-skip-info {
+                padding: 8px;
+                font-size: 11px;
+            }
+            
+            .submit-btn {
+                padding: 14px;
+                font-size: 15px;
+            }
+            
+            .info-text {
+                font-size: 11px;
+            }
+        }
+        
+        /* Very small screens */
+        @media screen and (max-width: 360px) {
+            .container {
+                padding: 20px 15px;
+            }
+            
+            .lang-btn {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+            
+            .logo h1 {
+                font-size: 16px;
+            }
+        }
+        
+        /* Landscape mode on mobile */
+        @media screen and (max-height: 500px) and (orientation: landscape) {
+            body {
+                align-items: flex-start;
+                padding: 10px;
+            }
+            
+            .container {
+                margin: 10px auto;
+            }
+            
+            .logo {
+                margin-bottom: 15px;
+            }
+            
+            .logo img {
+                max-width: 80px;
+            }
+        }
     </style>
 </head>
 <body>

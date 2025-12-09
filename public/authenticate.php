@@ -222,8 +222,49 @@ function redirectToSuccess($linkLogin, $username, $surname, $lang, $speed) {
 }
 
 /**
+ * Check active session count for a MikroTik hotspot user
+ * Returns the number of currently active sessions
+ */
+function checkMikroTikActiveSessionCount($config, $roomNumber) {
+    if (!isset($config['mikrotik']['enabled']) || !$config['mikrotik']['enabled']) {
+        return 0; // MikroTik disabled, no sessions to count
+    }
+    
+    $host = $config['mikrotik']['host'];
+    $port = $config['mikrotik']['port'] ?? 8728;
+    $user = $config['mikrotik']['user'];
+    $mtUsername = 'room' . $roomNumber;
+    
+    try {
+        require_once __DIR__ . '/../vendor/autoload.php';
+        
+        $client = new \RouterOS\Client([
+            'host' => $host,
+            'user' => $user,
+            'pass' => $config['mikrotik']['pass'],
+            'port' => $port,
+            'timeout' => 10
+        ]);
+        
+        // Count active sessions for this user
+        $query = new \RouterOS\Query('/ip/hotspot/active/print');
+        $query->where('user', $mtUsername);
+        $activeSessions = $client->query($query)->read();
+        
+        debugLog("Active sessions for $mtUsername", $activeSessions);
+        return count($activeSessions);
+        
+    } catch (Exception $e) {
+        debugLog("Error checking active sessions: " . $e->getMessage());
+        return 0; // On error, allow login attempt
+    }
+}
+
+/**
  * Configure MikroTik hotspot user via API and authorize the client
  * Creates user AND activates session directly via IP binding (no browser login needed)
+ * 
+ * @return array ['success' => bool, 'error' => string|null, 'error_type' => string|null]
  */
 function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAddress = null, $clientIP = null) {
     debugLog("=== MIKROTIK CONFIGURATION ===");
@@ -238,8 +279,11 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
     // Check if MikroTik integration is enabled
     if (!isset($config['mikrotik']['enabled']) || !$config['mikrotik']['enabled']) {
         debugLog("MikroTik integration DISABLED, skipping");
-        return true; // Skip if not enabled
+        return ['success' => true, 'error' => null, 'error_type' => null];
     }
+    
+    // Get max concurrent sessions from config (default 3)
+    $maxSessions = $config['mikrotik']['max_sessions'] ?? 3;
     
     $host = $config['mikrotik']['host'];
     $port = $config['mikrotik']['port'] ?? 8728;
@@ -260,14 +304,14 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
     } else {
         debugLog("✗ TCP connection FAILED: [$errno] $errstr");
         error_log("MikroTik: Cannot connect to $host:$port - [$errno] $errstr");
-        return false;
+        return ['success' => false, 'error' => 'Connection failed', 'error_type' => 'connection'];
     }
     
     // Check if RouterOS API library is available
     if (!file_exists(__DIR__ . '/../vendor/autoload.php')) {
         debugLog("ERROR: vendor/autoload.php not found");
         error_log("MikroTik API: vendor/autoload.php not found. Run 'composer require evilfreelancer/routeros-api-php'");
-        return false;
+        return ['success' => false, 'error' => 'API library not found', 'error_type' => 'config'];
     }
     
     require_once __DIR__ . '/../vendor/autoload.php';
@@ -275,7 +319,7 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
     if (!class_exists('RouterOS\Client')) {
         debugLog("ERROR: RouterOS\\Client class not found");
         error_log("MikroTik API: RouterOS\Client class not found. Run 'composer require evilfreelancer/routeros-api-php'");
-        return false;
+        return ['success' => false, 'error' => 'API class not found', 'error_type' => 'config'];
     }
     
     try {
@@ -292,6 +336,52 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
         // Use Room Number as MikroTik Username
         $mtUsername = 'room' . $roomNumber;
         debugLog("MikroTik username: $mtUsername");
+        
+        // =========================================================
+        // CHECK CONCURRENT SESSION LIMIT BEFORE PROCEEDING
+        // =========================================================
+        // Check if this device (MAC) already has an active session
+        $deviceAlreadyActive = false;
+        if ($macAddress) {
+            try {
+                $macCheckQuery = new \RouterOS\Query('/ip/hotspot/active/print');
+                $macCheckQuery->where('mac-address', $macAddress);
+                $existingMacSession = $client->query($macCheckQuery)->read();
+                if (!empty($existingMacSession)) {
+                    debugLog("Device already has active session - allowing reconnect");
+                    $deviceAlreadyActive = true;
+                }
+            } catch (Exception $e) {
+                debugLog("Could not check device session: " . $e->getMessage());
+            }
+        }
+        
+        // Only check session limit if this is a NEW device connection
+        if (!$deviceAlreadyActive) {
+            try {
+                $activeQuery = new \RouterOS\Query('/ip/hotspot/active/print');
+                $activeQuery->where('user', $mtUsername);
+                $activeSessions = $client->query($activeQuery)->read();
+                $activeCount = count($activeSessions);
+                
+                debugLog("Active sessions for $mtUsername: $activeCount / $maxSessions max");
+                
+                if ($activeCount >= $maxSessions) {
+                    debugLog("SESSION LIMIT REACHED - blocking new device");
+                    error_log("MikroTik: Session limit reached for $mtUsername ($activeCount/$maxSessions)");
+                    return [
+                        'success' => false, 
+                        'error' => "You have reached the maximum of $maxSessions devices connected at the same time. Please disconnect one of your devices and wait a few minutes before connecting this new device.", 
+                        'error_type' => 'session_limit',
+                        'active_count' => $activeCount,
+                        'max_sessions' => $maxSessions
+                    ];
+                }
+            } catch (Exception $e) {
+                debugLog("Could not check session count: " . $e->getMessage());
+                // On error, allow login attempt - MikroTik will block if needed
+            }
+        }
         
         // Check if user already exists
         debugLog("Checking if user exists...");
@@ -313,14 +403,16 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
             error_log("MikroTik: Created user $mtUsername with profile $profile");
         } else {
             // Update existing user profile and password
+            // Clear mac-address to allow multiple devices (MikroTik only allows 1 MAC per user)
             debugLog("Updating EXISTING hotspot user (ID: " . $existingUser[0]['.id'] . ")");
             $setQuery = new \RouterOS\Query('/ip/hotspot/user/set');
             $setQuery->equal('.id', $existingUser[0]['.id']);
             $setQuery->equal('profile', $profile);
             $setQuery->equal('password', $surname);
+            $setQuery->equal('mac-address', ''); // Clear MAC binding to allow multiple devices
             $result = $client->query($setQuery)->read();
             debugLog("User update result", $result);
-            error_log("MikroTik: Updated user $mtUsername to profile $profile");
+            error_log("MikroTik: Updated user $mtUsername to profile $profile (MAC cleared for multi-device)");
         }
         
         // =========================================================
@@ -388,41 +480,14 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
                 
             } catch (Exception $loginEx) {
                 debugLog("Method A failed: " . $loginEx->getMessage());
-                
-                // Method B: Use /ip/hotspot/host to make MikroTik recognize the device,
-                // then the device's next request will trigger auto-login
-                try {
-                    debugLog("Trying Method B: Add host entry for auto-login...");
-                    
-                    // Check if host exists
-                    $hostQuery = new \RouterOS\Query('/ip/hotspot/host/print');
-                    $hostQuery->where('mac-address', $macAddress);
-                    $existingHost = $client->query($hostQuery)->read();
-                    debugLog("Existing host entries", $existingHost);
-                    
-                    // The host entry is created automatically by MikroTik when device connects
-                    // We can't create it manually, but we can check if it exists
-                    
-                    if (!empty($existingHost)) {
-                        // Device is known to MikroTik - try to authorize it
-                        debugLog("Host found - device is connected to hotspot");
-                        
-                        // Method C: Use cookie-based auto-login
-                        // Add the MAC to the user for auto-recognition
-                        debugLog("Binding MAC to user for auto-login on reconnect...");
-                        $setQuery = new \RouterOS\Query('/ip/hotspot/user/set');
-                        $setQuery->equal('name', $mtUsername);
-                        $setQuery->equal('mac-address', $macAddress);
-                        $client->query($setQuery)->read();
-                        debugLog("MAC bound to user - will auto-login on next connection");
-                        $sessionCreated = true;
-                    } else {
-                        debugLog("Host not found - device may not be connected via hotspot interface");
-                    }
-                    
-                } catch (Exception $hostEx) {
-                    debugLog("Method B also failed: " . $hostEx->getMessage());
-                }
+                // API-based session creation not available on this RouterOS version
+                // Session will be created via browser-based login in alogin.html
+                // 
+                // NOTE: We intentionally do NOT bind MAC to the user because:
+                // 1. MikroTik only allows ONE mac-address per hotspot user
+                // 2. Binding a new MAC would disconnect previous devices
+                // 3. We need multiple devices per room to work independently
+                debugLog("Browser-based login will be used to create session with profile");
             }
             
             if (!$sessionCreated) {
@@ -437,13 +502,13 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
         }
         
         debugLog("=== MIKROTIK CONFIGURATION COMPLETE ===");
-        return true;
+        return ['success' => true, 'error' => null, 'error_type' => null];
         
     } catch (Exception $e) {
         debugLog("EXCEPTION: " . $e->getMessage());
         debugLog("Stack trace", $e->getTraceAsString());
         error_log("MikroTik API Error: " . $e->getMessage());
-        return false;
+        return ['success' => false, 'error' => $e->getMessage(), 'error_type' => 'exception'];
     }
 }
 
@@ -645,20 +710,9 @@ try {
         redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.", $lang);
     }
     
-    // Check device limit only if we have a valid MAC (otherwise we can't track)
-    $maxDevices = $db_config['max_devices_per_guest'] ?? 3;
-    if ($hasValidMAC) {
-        $existingDevice = isDeviceRegisteredForGuest($pdo, $mac_address, $username, $surname);
-        if (!$existingDevice) {
-            $deviceCount = getDeviceCountForGuest($pdo, $username, $surname);
-            if ($deviceCount >= $maxDevices) {
-                error_log("Device limit reached - Room: $username, Guest: $surname, Count: $deviceCount");
-                redirectToError("Maximum number of devices ($maxDevices) reached for this room. Please disconnect a device or contact reception.", $lang);
-            }
-        }
-    } else {
-        debugLog("Skipping device limit check - no valid MAC available");
-    }
+    // Device limit is handled by MikroTik via shared-users setting on hotspot user profile
+    // We just track devices for admin visibility, no hard limit enforced here
+    debugLog("Device tracking: MAC=" . ($mac_address ?? "N/A") . " (limit enforced by MikroTik shared-users)");
     
     // Map speed selection to MikroTik profile and numeric speed for database
     $profileMap = $db_config['mikrotik']['profiles'] ?? [
@@ -677,13 +731,21 @@ try {
     debugLog("Speed: $wifi_speed -> Profile: $selectedProfile ($numericSpeed Mbps)");
     
     // Configure MikroTik hotspot user (and session if MAC/IP available)
-    $mikrotikSuccess = configureMikroTikUser($db_config, $username, $surname, $selectedProfile, $mac_address, $clientIP);
-    debugLog("MikroTik configuration result: " . ($mikrotikSuccess ? "SUCCESS" : "FAILED"));
+    $mikrotikResult = configureMikroTikUser($db_config, $username, $surname, $selectedProfile, $mac_address, $clientIP);
+    debugLog("MikroTik configuration result", $mikrotikResult);
     
-    if (!$mikrotikSuccess && ($db_config['mikrotik']['enabled'] ?? false)) {
-        debugLog("ERROR: MikroTik failed and is enabled - aborting");
-        // Only fail if MikroTik is enabled but failed
-        redirectToError("WiFi system temporarily unavailable. Please try again or contact reception.", $lang);
+    // Handle MikroTik result
+    if (!$mikrotikResult['success'] && ($db_config['mikrotik']['enabled'] ?? false)) {
+        // Check for specific error types
+        if ($mikrotikResult['error_type'] === 'session_limit') {
+            // Session limit reached - show friendly error
+            debugLog("ERROR: Session limit reached - showing user-friendly message");
+            redirectToError($mikrotikResult['error'], $lang);
+        } else {
+            // Other MikroTik errors
+            debugLog("ERROR: MikroTik failed and is enabled - aborting");
+            redirectToError("WiFi system temporarily unavailable. Please try again or contact reception.", $lang);
+        }
     }
     
     // Register the device in database for admin tracking (only if valid MAC)

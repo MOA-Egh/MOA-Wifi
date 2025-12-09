@@ -178,7 +178,82 @@
             border-radius: 8px;
             padding: 20px;
             margin-top: 20px;
-            text-align: left;
+        }
+        
+        /* Mobile Responsive Styles */
+        @media screen and (max-width: 480px) {
+            body {
+                padding: 10px;
+                align-items: flex-start;
+                padding-top: 20px;
+            }
+            
+            .error-container {
+                padding: 25px 20px;
+                width: 100%;
+                border-radius: 8px;
+            }
+            
+            .error-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 28px;
+                margin-bottom: 15px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            .error-message {
+                font-size: 13px;
+            }
+            
+            .lang-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+                margin: 0 3px;
+            }
+            
+            .error-details {
+                padding: 12px;
+            }
+            
+            .error-description {
+                font-size: 13px;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .retry-btn,
+            .back-btn {
+                width: 100%;
+                padding: 14px;
+            }
+            
+            .help-section {
+                padding: 15px;
+            }
+        }
+        
+        /* Very small screens */
+        @media screen and (max-width: 360px) {
+            .error-container {
+                padding: 20px 15px;
+            }
+            
+            h1 {
+                font-size: 18px;
+            }
+            
+            .error-icon {
+                width: 50px;
+                height: 50px;
+                font-size: 24px;
+            }
         }
         
         .help-title {
