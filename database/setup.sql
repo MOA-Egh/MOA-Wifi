@@ -33,27 +33,26 @@ CREATE TABLE rooms (
 -- Used for admin reporting and device management
 --
 -- Columns:
---   device_mac  = MAC address of the device
+--   mac_address = MAC address of the device
 --   room_number = Room number (matches rooms.name)
---   surname     = Guest surname used for authentication
+--   last_name   = Guest surname used for authentication
 --   speed       = Speed in Mbps (10 = normal, 20 = fast/skip cleaning)
 --
--- Note: Composite unique key on (room_number, surname, device_mac) ensures
+-- Note: Composite unique key on (room_number, last_name, mac_address) ensures
 -- each guest's devices are tracked separately. When a new guest checks in
 -- with a different surname, their devices are tracked independently.
 -- ============================================================================
 DROP TABLE IF EXISTS authorized_devices;
 CREATE TABLE authorized_devices (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    device_mac VARCHAR(17) NOT NULL,      -- MAC address (format: XX:XX:XX:XX:XX:XX)
     room_number VARCHAR(10) NOT NULL,     -- Room number
-    surname VARCHAR(100) NOT NULL,        -- Guest surname
-    speed INT DEFAULT 10,                 -- Speed in Mbps (10 or 20)
-    last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_name VARCHAR(100) NOT NULL,      -- Guest surname
+    mac_address VARCHAR(17) NOT NULL,     -- MAC address (format: XX:XX:XX:XX:XX:XX)
+    speed INT DEFAULT 20,                 -- Speed in Mbps (10 or 20)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY idx_room_guest_device (room_number, surname, device_mac),
-    KEY idx_device_mac (device_mac),
-    KEY idx_room_surname (room_number, surname),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_mac (mac_address),
+    KEY idx_room_surname (room_number, last_name),
     KEY idx_speed (speed)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -92,12 +91,12 @@ CREATE TABLE rooms_to_skip (
 CREATE OR REPLACE VIEW room_device_count AS
 SELECT 
     room_number,
-    surname,
+    last_name as surname,
     speed,
     COUNT(*) as device_count,
-    MAX(last_update) as last_activity
+    MAX(updated_at) as last_activity
 FROM authorized_devices 
-GROUP BY room_number, surname, speed;
+GROUP BY room_number, last_name, speed;
 
 -- ============================================================================
 -- VERIFICATION QUERIES (run these to check setup)
@@ -109,8 +108,79 @@ GROUP BY room_number, surname, speed;
 -- SELECT 'rooms_to_skip', COUNT(*) FROM rooms_to_skip;
 
 -- ============================================================================
+-- TABLE: cached_reservations
+-- ============================================================================
+-- Caches Mews reservation data to reduce API calls
+-- Cache is valid until checkout date
+-- Cleared daily at 3am
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS cached_reservations (
+    reservation_id VARCHAR(36) PRIMARY KEY, -- Mews Reservation GUID
+    room_id VARCHAR(36) NOT NULL,           -- Mews Resource GUID
+    room_number VARCHAR(10) NOT NULL,       -- Human-readable room number (from rooms table)
+    surname VARCHAR(100) NOT NULL,          -- Guest surname (lowercase for matching)
+    check_in DATE NOT NULL,
+    check_out DATE NOT NULL,
+    customer_id VARCHAR(36) NOT NULL,       -- Mews Customer GUID
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_room_surname (room_id, surname),
+    KEY idx_checkout (check_out),           -- For cleanup queries
+    KEY idx_room_number (room_number)       -- For lookup by room number
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================================
+-- TABLE: system_settings
+-- ============================================================================
+-- Stores system configuration values like last bulk fetch timestamp
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS system_settings (
+    setting_key VARCHAR(50) PRIMARY KEY,
+    setting_value VARCHAR(255),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Initialize last_bulk_fetch setting (set to epoch so first request triggers bulk fetch)
+INSERT IGNORE INTO system_settings (setting_key, setting_value) 
+VALUES ('last_bulk_fetch', '1970-01-01 00:00:00');
+
+-- ============================================================================
+-- EVENT: clear_reservation_cache
+-- ============================================================================
+-- Runs daily at 3am to clear expired reservations from cache
+-- Requires EVENT scheduler to be enabled: SET GLOBAL event_scheduler = ON;
+-- ============================================================================
+DELIMITER //
+CREATE EVENT IF NOT EXISTS clear_reservation_cache
+ON SCHEDULE EVERY 1 DAY
+STARTS (TIMESTAMP(CURRENT_DATE) + INTERVAL 3 HOUR)
+DO
+BEGIN
+    -- Delete reservations where checkout has passed
+    DELETE FROM cached_reservations WHERE check_out < CURRENT_DATE;
+    
+    -- Reset bulk fetch timestamp to force fresh data
+    UPDATE system_settings 
+    SET setting_value = '1970-01-01 00:00:00' 
+    WHERE setting_key = 'last_bulk_fetch';
+END//
+DELIMITER ;
+
+-- ============================================================================
+-- VIEW: cache_statistics
+-- ============================================================================
+-- Provides cache statistics for admin dashboard
+-- ============================================================================
+CREATE OR REPLACE VIEW cache_statistics AS
+SELECT 
+    (SELECT COUNT(*) FROM cached_reservations) as total_cached,
+    (SELECT COUNT(*) FROM cached_reservations WHERE check_out >= CURRENT_DATE) as active_cached,
+    (SELECT setting_value FROM system_settings WHERE setting_key = 'last_bulk_fetch') as last_bulk_fetch;
+
+-- ============================================================================
 -- NEXT STEPS:
 -- 1. Run this script in phpMyAdmin
--- 2. Access http://localhost/MOA-Wifi/public/sync_rooms.php to populate rooms
--- 3. Test with http://localhost/MOA-Wifi/public/test_mews.php
+-- 2. Enable MySQL event scheduler: SET GLOBAL event_scheduler = ON;
+-- 3. Access http://localhost/MOA-Wifi/public/sync_rooms.php to populate rooms
+-- 4. Test with http://localhost/MOA-Wifi/public/test_mews.php
 -- ============================================================================

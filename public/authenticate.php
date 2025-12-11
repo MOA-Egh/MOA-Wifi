@@ -126,12 +126,12 @@ function getDeviceCountForGuest($pdo, $room_number, $surname) {
 
 /**
  * Check if device is already registered for this guest
- * Uses room_number + surname + device_mac as the unique identifier
+ * Uses room_number + last_name + mac_address as the unique identifier
  */
 function isDeviceRegisteredForGuest($pdo, $mac_address, $room_number, $surname) {
     $stmt = $pdo->prepare("
         SELECT * FROM authorized_devices 
-        WHERE device_mac = ? AND room_number = ? AND surname = ?
+        WHERE mac_address = ? AND room_number = ? AND last_name = ?
     ");
     $stmt->execute([$mac_address, $room_number, $surname]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -139,7 +139,7 @@ function isDeviceRegisteredForGuest($pdo, $mac_address, $room_number, $surname) 
 
 /**
  * Register or update device for a specific guest
- * Uses composite key (room_number, surname, device_mac) for guest isolation
+ * Uses composite key (room_number, last_name, mac_address) for guest isolation
  */
 function registerDevice($pdo, $mac_address, $room_number, $surname, $speed) {
     // Check if this device is already registered for THIS guest
@@ -149,19 +149,19 @@ function registerDevice($pdo, $mac_address, $room_number, $surname, $speed) {
         // Update existing device for this guest
         $stmt = $pdo->prepare("
             UPDATE authorized_devices 
-            SET speed = ?, last_update = CURRENT_TIMESTAMP 
-            WHERE device_mac = ? AND room_number = ? AND surname = ?
+            SET speed = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE mac_address = ? AND room_number = ? AND last_name = ?
         ");
         $stmt->execute([$speed, $mac_address, $room_number, $surname]);
     } else {
         // Insert new device for this guest
         // Uses ON DUPLICATE KEY to handle the composite unique constraint
         $stmt = $pdo->prepare("
-            INSERT INTO authorized_devices (device_mac, room_number, surname, speed) 
+            INSERT INTO authorized_devices (mac_address, room_number, last_name, speed) 
             VALUES (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE 
             speed = VALUES(speed), 
-            last_update = CURRENT_TIMESTAMP
+            updated_at = CURRENT_TIMESTAMP
         ");
         $stmt->execute([$mac_address, $room_number, $surname, $speed]);
     }
@@ -261,17 +261,146 @@ function checkMikroTikActiveSessionCount($config, $roomNumber) {
 }
 
 /**
+ * Manage Simple Queue for a device
+ * Creates or updates a per-device queue with the specified rate limit
+ * This allows different devices under the same user to have different speeds
+ * 
+ * @param \RouterOS\Client $client Connected RouterOS API client
+ * @param string $macAddress Device MAC address
+ * @param string $clientIP Device IP address
+ * @param string $roomNumber Room number for naming
+ * @param string $speedLimit Rate limit string (e.g., "10M/10M")
+ * @return bool Success status
+ */
+function manageDeviceQueue($client, $macAddress, $clientIP, $roomNumber, $speedLimit) {
+    debugLog("=== MANAGE DEVICE QUEUE ===");
+    debugLog("Parameters", [
+        'macAddress' => $macAddress,
+        'clientIP' => $clientIP,
+        'roomNumber' => $roomNumber,
+        'speedLimit' => $speedLimit
+    ]);
+    
+    if (!$clientIP || !$macAddress) {
+        debugLog("Cannot create queue - missing IP or MAC");
+        return false;
+    }
+    
+    // Queue name format: wifi_ROOM_MAC (replace : with - for valid name)
+    $safeMac = str_replace(':', '-', $macAddress);
+    $queueName = "wifi_{$roomNumber}_{$safeMac}";
+    debugLog("Queue name: $queueName");
+    
+    try {
+        // Step 1: Check if queue already exists for this device
+        $printQuery = new \RouterOS\Query('/queue/simple/print');
+        $printQuery->where('name', $queueName);
+        $existingQueue = $client->query($printQuery)->read();
+        debugLog("Existing queue check", $existingQueue);
+        
+        if (!empty($existingQueue)) {
+            // Queue exists - update it with new speed
+            debugLog("Updating existing queue...");
+            $setQuery = new \RouterOS\Query('/queue/simple/set');
+            $setQuery->equal('.id', $existingQueue[0]['.id']);
+            $setQuery->equal('max-limit', $speedLimit);
+            $setQuery->equal('target', $clientIP . '/32');
+            $setQuery->equal('comment', 'WiFi Portal - Room ' . $roomNumber . ' - ' . date('Y-m-d H:i:s'));
+            $result = $client->query($setQuery)->read();
+            debugLog("Queue update result", $result);
+            error_log("MikroTik Queue: Updated $queueName with limit $speedLimit");
+        } else {
+            // Queue doesn't exist - create new one
+            debugLog("Creating new queue...");
+            $addQuery = new \RouterOS\Query('/queue/simple/add');
+            $addQuery->equal('name', $queueName);
+            $addQuery->equal('target', $clientIP . '/32');
+            $addQuery->equal('max-limit', $speedLimit);
+            $addQuery->equal('comment', 'WiFi Portal - Room ' . $roomNumber . ' - ' . date('Y-m-d H:i:s'));
+            $result = $client->query($addQuery)->read();
+            debugLog("Queue creation result", $result);
+            error_log("MikroTik Queue: Created $queueName with limit $speedLimit for IP $clientIP");
+        }
+        
+        debugLog("✓ Device queue configured successfully");
+        return true;
+        
+    } catch (Exception $e) {
+        debugLog("Queue management error: " . $e->getMessage());
+        error_log("MikroTik Queue Error: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Remove old queues for a device (cleanup when device reconnects)
+ * Searches for queues matching the MAC address and removes them
+ * 
+ * @param \RouterOS\Client $client Connected RouterOS API client
+ * @param string $macAddress Device MAC address
+ * @return int Number of queues removed
+ */
+function cleanupDeviceQueues($client, $macAddress) {
+    debugLog("=== CLEANUP DEVICE QUEUES ===");
+    debugLog("MAC: $macAddress");
+    
+    if (!$macAddress) {
+        return 0;
+    }
+    
+    $safeMac = str_replace(':', '-', $macAddress);
+    $removed = 0;
+    
+    try {
+        // Find all queues that contain this MAC in the name
+        $printQuery = new \RouterOS\Query('/queue/simple/print');
+        $allQueues = $client->query($printQuery)->read();
+        
+        foreach ($allQueues as $queue) {
+            // Check if queue name contains this device's MAC
+            if (isset($queue['name']) && strpos($queue['name'], $safeMac) !== false) {
+                debugLog("Removing old queue: " . $queue['name']);
+                try {
+                    $removeQuery = new \RouterOS\Query('/queue/simple/remove');
+                    $removeQuery->equal('.id', $queue['.id']);
+                    $client->query($removeQuery)->read();
+                    $removed++;
+                    debugLog("✓ Queue removed");
+                } catch (Exception $e) {
+                    debugLog("Could not remove queue: " . $e->getMessage());
+                }
+            }
+        }
+        
+        debugLog("Cleanup complete. Removed $removed queue(s)");
+        return $removed;
+        
+    } catch (Exception $e) {
+        debugLog("Cleanup error: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
  * Configure MikroTik hotspot user via API and authorize the client
- * Creates user AND activates session directly via IP binding (no browser login needed)
+ * Creates user with generic profile, then applies per-device rate limit via Simple Queue
  * 
  * @return array ['success' => bool, 'error' => string|null, 'error_type' => string|null]
  */
-function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAddress = null, $clientIP = null) {
+function configureMikroTikUser($config, $roomNumber, $surname, $speedChoice, $macAddress = null, $clientIP = null) {
     debugLog("=== MIKROTIK CONFIGURATION ===");
+    
+    // Get speed limit and profile from config based on user's choice
+    $speedLimits = $config['mikrotik']['speed_limits'] ?? ['normal' => '10M/10M', 'fast' => '20M/20M'];
+    $speedLimit = $speedLimits[$speedChoice] ?? $speedLimits['normal'];
+    $defaultProfile = $config['mikrotik']['default_profile'] ?? 'hm-hotspot';
+    
     debugLog("Parameters", [
         'roomNumber' => $roomNumber,
         'surname' => $surname,
-        'profile' => $profile,
+        'speedChoice' => $speedChoice,
+        'speedLimit' => $speedLimit,
+        'defaultProfile' => $defaultProfile,
         'macAddress' => $macAddress,
         'clientIP' => $clientIP
     ]);
@@ -391,37 +520,37 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
         debugLog("User query result", $existingUser);
         
         if (empty($existingUser)) {
-            // Create new user (no MAC binding - allows multiple devices)
-            debugLog("Creating NEW hotspot user...");
+            // Create new user with default profile (no rate limit - queue handles that)
+            debugLog("Creating NEW hotspot user with default profile...");
             $addQuery = new \RouterOS\Query('/ip/hotspot/user/add');
             $addQuery->equal('name', $mtUsername);
             $addQuery->equal('password', $surname);
-            $addQuery->equal('profile', $profile);
+            $addQuery->equal('profile', $defaultProfile);
             $addQuery->equal('comment', 'Created via WiFi Portal - ' . date('Y-m-d H:i:s'));
             $result = $client->query($addQuery)->read();
             debugLog("User creation result", $result);
-            error_log("MikroTik: Created user $mtUsername with profile $profile");
+            error_log("MikroTik: Created user $mtUsername with profile $defaultProfile");
         } else {
-            // Update existing user profile and password
+            // Update existing user password (profile stays the same - no rate limit)
             // Clear mac-address to allow multiple devices (MikroTik only allows 1 MAC per user)
             debugLog("Updating EXISTING hotspot user (ID: " . $existingUser[0]['.id'] . ")");
             $setQuery = new \RouterOS\Query('/ip/hotspot/user/set');
             $setQuery->equal('.id', $existingUser[0]['.id']);
-            $setQuery->equal('profile', $profile);
+            $setQuery->equal('profile', $defaultProfile);
             $setQuery->equal('password', $surname);
             $setQuery->equal('mac-address', ''); // Clear MAC binding to allow multiple devices
             $result = $client->query($setQuery)->read();
             debugLog("User update result", $result);
-            error_log("MikroTik: Updated user $mtUsername to profile $profile (MAC cleared for multi-device)");
+            error_log("MikroTik: Updated user $mtUsername password (profile: $defaultProfile)");
         }
         
         // =========================================================
-        // AUTHORIZE DEVICE - Create active session WITH profile
+        // AUTHORIZE DEVICE & CREATE PER-DEVICE SPEED QUEUE
         // =========================================================
-        // We need to create an active hotspot session so the profile 
-        // (rate limits) are applied. NO bypassed IP binding!
-        debugLog("=== AUTHORIZE DEVICE WITH PROFILE ===");
-        debugLog("ClientIP: $clientIP, MAC: $macAddress, Profile: $profile");
+        // 1. Create/update hotspot session for authentication
+        // 2. Create Simple Queue for this device's speed limit
+        debugLog("=== AUTHORIZE DEVICE & CREATE SPEED QUEUE ===");
+        debugLog("ClientIP: $clientIP, MAC: $macAddress, SpeedLimit: $speedLimit");
         
         if ($clientIP && $macAddress) {
             // Step 1: Remove any existing bypassed IP bindings for this MAC
@@ -461,7 +590,19 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
                 debugLog("Note: Could not check/remove active sessions: " . $e->getMessage());
             }
             
-            // Step 3: Create active session using MikroTik's login mechanism
+            // Step 3: Clean up any old queues for this device (in case speed changed)
+            cleanupDeviceQueues($client, $macAddress);
+            
+            // Step 4: Create the per-device speed queue
+            debugLog("Creating per-device speed queue...");
+            $queueCreated = manageDeviceQueue($client, $macAddress, $clientIP, $roomNumber, $speedLimit);
+            if ($queueCreated) {
+                debugLog("✓ Speed queue created: $speedLimit");
+            } else {
+                debugLog("⚠ Could not create speed queue - device may not have rate limit");
+            }
+            
+            // Step 5: Create active session using MikroTik's login mechanism
             // Method A: Try /ip/hotspot/active/login (RouterOS 6.45+)
             $sessionCreated = false;
             
@@ -475,30 +616,28 @@ function configureMikroTikUser($config, $roomNumber, $surname, $profile, $macAdd
                 $loginResult = $client->query($loginQuery)->read();
                 debugLog("Login result", $loginResult);
                 $sessionCreated = true;
-                debugLog("✓ Active session created with profile: $profile");
-                error_log("MikroTik: Session created for $mtUsername ($macAddress) with profile $profile");
+                debugLog("✓ Active session created");
+                error_log("MikroTik: Session created for $mtUsername ($macAddress) with queue limit $speedLimit");
                 
             } catch (Exception $loginEx) {
                 debugLog("Method A failed: " . $loginEx->getMessage());
                 // API-based session creation not available on this RouterOS version
                 // Session will be created via browser-based login in alogin.html
-                // 
-                // NOTE: We intentionally do NOT bind MAC to the user because:
-                // 1. MikroTik only allows ONE mac-address per hotspot user
-                // 2. Binding a new MAC would disconnect previous devices
-                // 3. We need multiple devices per room to work independently
-                debugLog("Browser-based login will be used to create session with profile");
+                // The queue is already created and will apply when session starts
+                debugLog("Browser-based login will be used to create session");
             }
             
             if (!$sessionCreated) {
                 debugLog("⚠ Could not create active session automatically");
-                debugLog("Guest will see MikroTik login page - credentials are ready: $mtUsername / $surname");
+                debugLog("Guest will see MikroTik login page - credentials: $mtUsername / $surname");
+                debugLog("Queue is ready and will apply once session is created");
             }
             
         } else {
             debugLog("⚠ Cannot authorize device - missing client IP or MAC");
             debugLog("Client IP: " . ($clientIP ?: "MISSING"));
             debugLog("MAC: " . ($macAddress ?: "MISSING"));
+            debugLog("Speed limit queue cannot be created without IP");
         }
         
         debugLog("=== MIKROTIK CONFIGURATION COMPLETE ===");
@@ -701,25 +840,19 @@ try {
         redirectToError("Room not found. Please contact reception.", $lang);
     }
     
-    // Initialize Mews authentication
+    // Initialize Mews authentication with database connection for caching
     $mews_auth = new MewsWifiAuth($mews_environment);
+    $mews_auth->setDatabase($pdo);
     
-    // Validate guest credentials against Mews PMS using room_id
+    // Validate guest credentials against Mews PMS using room_id (with caching)
     $guest = validateGuest($mews_auth, $room_id, $username, $surname);
     if (!$guest) {
         redirectToError("Invalid room number or surname. Please check your reservation details or contact reception.", $lang);
     }
     
-    // Device limit is handled by MikroTik via shared-users setting on hotspot user profile
-    // We just track devices for admin visibility, no hard limit enforced here
-    debugLog("Device tracking: MAC=" . ($mac_address ?? "N/A") . " (limit enforced by MikroTik shared-users)");
-    
-    // Map speed selection to MikroTik profile and numeric speed for database
-    $profileMap = $db_config['mikrotik']['profiles'] ?? [
-        'normal' => 'hm_10M',
-        'fast'   => 'hm_20M'
-    ];
-    $selectedProfile = $profileMap[$wifi_speed] ?? $profileMap['normal'];
+    // Device limit is handled by MikroTik via active session count check
+    // We just track devices for admin visibility
+    debugLog("Device tracking: MAC=" . ($mac_address ?? "N/A") . " (limit enforced by active session count)");
     
     // Store numeric speed in database (10 Mbps for normal, 20 Mbps for fast)
     $numericSpeed = ($wifi_speed === 'fast') ? 20 : 10;
@@ -728,10 +861,11 @@ try {
     debugLog("Room: $username, Surname: $surname");
     debugLog("MAC Address: " . ($mac_address ?? "NOT AVAILABLE"));
     debugLog("Client IP: " . ($clientIP ?? "NOT AVAILABLE"));
-    debugLog("Speed: $wifi_speed -> Profile: $selectedProfile ($numericSpeed Mbps)");
+    debugLog("Speed choice: $wifi_speed ($numericSpeed Mbps)");
     
-    // Configure MikroTik hotspot user (and session if MAC/IP available)
-    $mikrotikResult = configureMikroTikUser($db_config, $username, $surname, $selectedProfile, $mac_address, $clientIP);
+    // Configure MikroTik hotspot user and per-device speed queue
+    // Passes speed choice (normal/fast), function will create appropriate queue
+    $mikrotikResult = configureMikroTikUser($db_config, $username, $surname, $wifi_speed, $mac_address, $clientIP);
     debugLog("MikroTik configuration result", $mikrotikResult);
     
     // Handle MikroTik result

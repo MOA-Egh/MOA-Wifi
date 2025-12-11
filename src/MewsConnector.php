@@ -221,7 +221,15 @@ class MewsConnector
         // Check for non-200 HTTP status
         if ($httpcode != 200) {
             error_log("Mews API error: HTTP $httpcode - $response");
-            throw new Exception("Mews API returned HTTP $httpcode");
+            // Try to extract error message from response
+            $errorMsg = "Mews API returned HTTP $httpcode";
+            $decoded = json_decode($response, true);
+            if ($decoded && isset($decoded['Message'])) {
+                $errorMsg .= ": " . $decoded['Message'];
+            } elseif ($response) {
+                $errorMsg .= " - " . substr($response, 0, 500);
+            }
+            throw new Exception($errorMsg);
         }
         
         // Decode the response from JSON and return it

@@ -54,14 +54,14 @@ function sendResponse($success, $data = null, $error = null) {
 function getDevices($pdo) {
     $stmt = $pdo->query("
         SELECT 
-            device_mac,
+            mac_address as device_mac,
             room_number,
-            surname,
+            last_name as surname,
             speed,
-            last_update,
+            updated_at as last_update,
             created_at
         FROM authorized_devices 
-        ORDER BY last_update DESC
+        ORDER BY updated_at DESC
     ");
     
     $devices = $stmt->fetchAll();
@@ -85,7 +85,7 @@ function getRooms($pdo) {
             r.guest_surname,
             r.skip_clean,
             r.updated_at,
-            COUNT(d.device_mac) as device_count
+            COUNT(d.mac_address) as device_count
         FROM rooms_to_skip r
         LEFT JOIN authorized_devices d ON r.room_number = d.room_number
         GROUP BY r.room_number, r.guest_surname, r.skip_clean, r.updated_at
@@ -100,10 +100,22 @@ function getRooms($pdo) {
         $mews_auth = new MewsWifiAuth($mews_config['mews']['environment']);
         $mews_reservations = $mews_auth->getTodaysReservations();
         
+        // Get room number lookup from database (resource_id -> room_number)
+        $roomLookup = [];
+        $roomStmt = $pdo->query("SELECT id, name FROM rooms");
+        while ($row = $roomStmt->fetch()) {
+            $roomLookup[$row['id']] = $row['name'];
+        }
+        
         // Create a map of Mews reservations by room number
         $mews_room_map = [];
         foreach ($mews_reservations as $reservation) {
-            $mews_room_map[$reservation['room_number']] = $reservation;
+            $resourceId = $reservation['resource_id'] ?? null;
+            if ($resourceId && isset($roomLookup[$resourceId])) {
+                $roomNumber = $roomLookup[$resourceId];
+                $mews_room_map[$roomNumber] = $reservation;
+                $mews_room_map[$roomNumber]['room_number'] = $roomNumber;
+            }
         }
         
         // Enhance rooms data with Mews information
@@ -141,7 +153,7 @@ function updateDeviceSpeed($pdo, $mac, $speed) {
     }
     
     // Get current device info
-    $stmt = $pdo->prepare("SELECT * FROM authorized_devices WHERE device_mac = ?");
+    $stmt = $pdo->prepare("SELECT * FROM authorized_devices WHERE mac_address = ?");
     $stmt->execute([$mac]);
     $device = $stmt->fetch();
     
@@ -152,8 +164,8 @@ function updateDeviceSpeed($pdo, $mac, $speed) {
     // Update device speed
     $stmt = $pdo->prepare("
         UPDATE authorized_devices 
-        SET speed = ?, last_update = CURRENT_TIMESTAMP 
-        WHERE device_mac = ?
+        SET speed = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE mac_address = ?
     ");
     $stmt->execute([$speed, $mac]);
     
@@ -164,7 +176,7 @@ function updateDeviceSpeed($pdo, $mac, $speed) {
  * Remove device from authorized list
  */
 function removeDevice($pdo, $mac) {
-    $stmt = $pdo->prepare("DELETE FROM authorized_devices WHERE device_mac = ?");
+    $stmt = $pdo->prepare("DELETE FROM authorized_devices WHERE mac_address = ?");
     $result = $stmt->execute([$mac]);
     
     if ($stmt->rowCount() === 0) {
